@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from shared.groq_client import score_json
+from shared.llm import score_json
 from shared.logging import get_logger
 
 log = get_logger("bot1.scoring")

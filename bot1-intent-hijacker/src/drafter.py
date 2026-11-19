@@ -1,7 +1,7 @@
 """Reply drafter — contrarian-but-kind Dave Fieldston voice."""
 from __future__ import annotations
 
-from shared.groq_client import draft as groq_draft
+from shared.llm import draft as llm_draft
 from shared.logging import get_logger
 
 from .persona import enforce_disclosure
@@ -83,7 +83,7 @@ async def draft_reply(signal: dict, channel: str) -> str | None:
     The orchestrator attaches intent_score + pain_point from scoring output.
     """
     prompt = _render(signal, channel)
-    text = await groq_draft(
+    text = await llm_draft(
         prompt,
         "Write the reply now, following all rules above.",
         temperature=0.65,

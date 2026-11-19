@@ -1,8 +1,15 @@
-"""Async Groq wrapper: Llama 3.3 70B for drafting, 3.1 8B Instant for scoring.
+"""DEPRECATED: single-provider Groq client.
 
-Retries on 429 with exponential backoff. Scoring uses JSON mode validated
-through a caller-supplied Pydantic schema.
+Kept because older bots in this monorepo still import it. New code should use
+`shared.llm.draft` / `shared.llm.score_json`, which wrap this + Gemini +
+NVIDIA + OpenRouter in an ordered fallback chain. Migrate on your next pass
+through a bot and delete these imports.
 """
+import warnings as _w
+_w.warn(
+    "shared.groq_client is deprecated — use shared.llm.draft / shared.llm.score_json",
+    DeprecationWarning, stacklevel=2,
+)
 from __future__ import annotations
 
 import asyncio
