@@ -138,8 +138,11 @@ async def _handle_lead(lead: dict) -> None:
         return
 
     # Draft
+    sig_for_draft = {**sig,
+                     "intent_score": intent,
+                     "pain_point": lead["score"].reason}
     try:
-        text = await draft_reply(sig, channel)
+        text = await draft_reply(sig_for_draft, channel)
     except Exception as e:
         log.warning("draft_fail", extra={"err": str(e), "lead_id": lead_id})
         record("draft", target=sig.get("url"), channel=channel,

@@ -50,9 +50,23 @@ FINGERPRINT = {
 
 
 def enforce_disclosure(text: str) -> str:
-    """Append the disclosure clause if the model forgot it. Last-resort guard."""
+    """Append the disclosure clause if the model forgot it. Last-resort guard.
+
+    Accepts any first-person Ominvo attribution: "I work on Ominvo",
+    "I'm on the Ominvo team", "Dave, marketing at Ominvo", "Dave from Ominvo",
+    "marketing lead at Ominvo", etc. Only falls back when Ominvo isn't named
+    or is clearly third-party ("a tool called Ominvo", "my friend uses Ominvo").
+    """
     low = text.lower()
-    if "ominvo" in low and ("i work" in low or "i'm on" in low or "i help build" in low):
+    if "ominvo" not in low:
+        sep = "\n\n" if not text.endswith("\n") else ""
+        return f"{text}{sep}{DISCLOSURE_CLAUSE}"
+    first_person_markers = [
+        "i work", "i'm on", "i help build", "i help run",
+        "at ominvo", "from ominvo", "on the ominvo",
+        "ominvo team", "i run marketing", "we at ominvo", "we build ominvo",
+    ]
+    if any(m in low for m in first_person_markers):
         return text
     sep = "\n\n" if not text.endswith("\n") else ""
     return f"{text}{sep}{DISCLOSURE_CLAUSE}"

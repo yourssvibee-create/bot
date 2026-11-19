@@ -69,20 +69,26 @@ async def draft(
     user: str,
     *,
     temperature: float = 0.7,
-    max_tokens: int = 500,
+    max_tokens: int = 1200,
+    reasoning_effort: str = "low",
 ) -> str:
-    """Return free-form text from the 70B model."""
+    """Return free-form text from the draft model.
+
+    gpt-oss-* on Groq is a reasoning model; without `reasoning_effort=low` the
+    model spends every token on its chain-of-thought and emits empty content.
+    """
     payload = {
         "model": MODEL_DRAFT,
         "temperature": temperature,
         "max_tokens": max_tokens,
+        "reasoning_effort": reasoning_effort,
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ],
     }
     data = await _call(payload)
-    return data["choices"][0]["message"]["content"].strip()
+    return (data["choices"][0]["message"].get("content") or "").strip()
 
 
 async def score_json(
@@ -91,13 +97,15 @@ async def score_json(
     schema: Type[T],
     *,
     temperature: float = 0.0,
-    max_tokens: int = 400,
+    max_tokens: int = 1200,
+    reasoning_effort: str = "low",
 ) -> T:
-    """Call the 8B model in JSON mode and validate against `schema`."""
+    """Call the score model in JSON mode and validate against `schema`."""
     payload = {
         "model": MODEL_SCORE,
         "temperature": temperature,
         "max_tokens": max_tokens,
+        "reasoning_effort": reasoning_effort,
         "response_format": {"type": "json_object"},
         "messages": [
             {"role": "system", "content": system},
@@ -105,7 +113,7 @@ async def score_json(
         ],
     }
     data = await _call(payload)
-    content = data["choices"][0]["message"]["content"]
+    content = data["choices"][0]["message"].get("content") or ""
     try:
         obj = json.loads(content)
         return schema.model_validate(obj)
