@@ -22,3 +22,6 @@ praw = "^7.7"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.vercel]
+entrypoint = "api.telegram_webhook:handler"

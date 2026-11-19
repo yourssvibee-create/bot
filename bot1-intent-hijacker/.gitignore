@@ -12,3 +12,9 @@ test-results/
 .mypy_cache/
 .pytest_cache/
 *.log
+
+.vercel
+.env*
+!.env.example
+supabase/.temp/
+supabase/.branches/
