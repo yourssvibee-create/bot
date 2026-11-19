@@ -23,8 +23,8 @@ from .logging import get_logger
 
 log = get_logger("groq")
 
-MODEL_DRAFT = "llama-3.3-70b-versatile"
-MODEL_SCORE = "llama-3.1-8b-instant"
+MODEL_DRAFT = "openai/gpt-oss-120b"
+MODEL_SCORE = "openai/gpt-oss-20b"
 
 _BASE = "https://api.groq.com/openai/v1/chat/completions"
 T = TypeVar("T", bound=BaseModel)
