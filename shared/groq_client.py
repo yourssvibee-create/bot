@@ -5,16 +5,17 @@ Kept because older bots in this monorepo still import it. New code should use
 NVIDIA + OpenRouter in an ordered fallback chain. Migrate on your next pass
 through a bot and delete these imports.
 """
-import warnings as _w
-_w.warn(
-    "shared.groq_client is deprecated — use shared.llm.draft / shared.llm.score_json",
-    DeprecationWarning, stacklevel=2,
-)
 from __future__ import annotations
 
 import asyncio
 import json
+import warnings as _w
 from typing import Any, Type, TypeVar
+
+_w.warn(
+    "shared.groq_client is deprecated — use shared.llm.draft / shared.llm.score_json",
+    DeprecationWarning, stacklevel=2,
+)
 
 import httpx
 from pydantic import BaseModel, ValidationError

@@ -16,7 +16,7 @@ from typing import Any, Type, TypeVar
 
 from pydantic import BaseModel
 
-from ..config import get
+from ..config import current_bot_id_or_none, get
 from ..logging import get_logger
 from .base import Provider, ProviderError
 from .providers.gemini import GeminiProvider
@@ -65,40 +65,38 @@ def _provider_order() -> list[Provider]:
 async def _call(role: str, func_name: str, *args, **kwargs):
     attempts: list[dict[str, Any]] = []
     providers = _provider_order()
+    bot_id = current_bot_id_or_none() or "unknown"
     if not providers:
-        raise LLMExhaustedError([{"provider": "none", "err": "no providers enabled"}])
+        raise LLMExhaustedError([{"provider": "none", "bot_id": bot_id,
+                                  "err": "no providers enabled"}])
 
     for p in providers:
         model = p.model_for(role)
         t0 = time.perf_counter()
+        base = {"bot_id": bot_id, "provider": p.name, "role": role, "model": model}
         try:
             result = await getattr(p, func_name)(*args, **kwargs)
             latency_ms = int((time.perf_counter() - t0) * 1000)
             log.info("llm_ok",
-                     extra={"provider": p.name, "role": role, "model": model,
-                            "latency_ms": latency_ms, "status": "ok"})
+                     extra={**base, "latency_ms": latency_ms, "status": "ok"})
             return result
         except ProviderError as e:
             latency_ms = int((time.perf_counter() - t0) * 1000)
             log.warning("llm_err",
-                        extra={"provider": p.name, "role": role, "model": model,
-                               "latency_ms": latency_ms, "status": "error",
+                        extra={**base, "latency_ms": latency_ms, "status": "error",
                                "retryable": e.retryable,
                                "status_code": e.status_code, "err": str(e)[:300]})
-            attempts.append({"provider": p.name, "model": model,
-                             "latency_ms": latency_ms, "status_code": e.status_code,
-                             "err": str(e)})
+            attempts.append({**base, "latency_ms": latency_ms,
+                             "status_code": e.status_code, "err": str(e)})
             if not e.retryable:
                 raise
             continue
         except Exception as e:
             latency_ms = int((time.perf_counter() - t0) * 1000)
             log.warning("llm_unexpected",
-                        extra={"provider": p.name, "role": role, "model": model,
-                               "latency_ms": latency_ms, "status": "error",
+                        extra={**base, "latency_ms": latency_ms, "status": "error",
                                "err": str(e)[:300]})
-            attempts.append({"provider": p.name, "model": model,
-                             "latency_ms": latency_ms, "err": str(e)})
+            attempts.append({**base, "latency_ms": latency_ms, "err": str(e)})
             continue
 
     raise LLMExhaustedError(attempts)
