@@ -39,16 +39,15 @@ def _slugify(s: str) -> str:
 
 
 def _script_stub(pain_point: dict) -> str:
-    """Deterministic 1800-word script for dry-run."""
+    """Compact deterministic script for dry-run. Real runs call Groq for ~1800
+    words; dry-run stays tiny so smoke tests finish in <60s."""
     rules = (
         "Reply within 48 hours or Google treats you as inactive. "
         "Response rate is the hidden local-ranking tiebreaker. "
         "Photo count outranks half a star of rating. "
     )
     body = f"Today's topic: {pain_point['title']}. {pain_point['context']} "
-    # Repeat body to reach ~1800 words.
-    chunk = (body + rules) * 40
-    return chunk
+    return (body + rules) * 2
 
 
 def split_segments(script: str) -> list[str]:
