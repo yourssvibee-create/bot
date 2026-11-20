@@ -2,7 +2,7 @@ name: bot2-nightly
 
 on:
   schedule:
-    - cron: "15 2 * * *"     # 02:15 UTC daily — 15m after bot1 to avoid Groq rate contention
+    - cron: "0 15 * * *"     # 07:00 America/Los_Angeles daily (15:00 UTC = 07:00 PST / 08:00 PDT; PST window)
   workflow_dispatch:
   push:
     branches: [main, master]
@@ -52,14 +52,19 @@ jobs:
       - name: Install poetry
         run: pipx install poetry==1.8.3
 
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
       - name: Install deps
         run: poetry install --no-interaction --no-ansi
 
       - name: Install playwright chromium
         run: poetry run playwright install --with-deps chromium
 
-      - name: Run nightly orchestrator
+      - name: Run nightly orchestrator (live)
         run: poetry run python -m workers.nightly_run
+        env:
+          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/bot2-social-factory
 
       - name: Upload failure screenshots
         if: always()
