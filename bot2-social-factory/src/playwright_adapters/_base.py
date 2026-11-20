@@ -35,6 +35,8 @@ class PlaywrightAdapter(BasePlatformAdapter):
     logged_in_selector: str = ""
     #: headless by default; subclasses or callers can flip for first-time setup
     headless: bool = True
+    #: router prefers the sibling API adapter when its tokens are present
+    PREFER_API: bool = True
 
     def __init__(self, *, dry_run: bool = False, headless: Optional[bool] = None) -> None:
         super().__init__(dry_run=dry_run)
