@@ -22,15 +22,13 @@ log = get_logger("bot2.router")
 # Registry maps a platform slug to (adapter_class, method). Platforms whose
 # post() isn't implemented yet (everything Playwright) are still included — the
 # router will attempt them, catch NotImplementedError, and record it as a skip.
-def _registry() -> dict[str, type[BasePlatformAdapter]]:
-    from .api_adapters import BlueskyAdapter
+def _playwright_registry() -> dict[str, type[BasePlatformAdapter]]:
     from .playwright_adapters import (
         FacebookAdapter, InstagramAdapter, LinkedInAdapter, MediumAdapter,
         NextdoorAdapter, PinterestAdapter, QuoraAdapter, ThreadsAdapter,
         TikTokAdapter, XAdapter, YouTubeAdapter,
     )
     return {
-        "bluesky":   BlueskyAdapter,
         "facebook":  FacebookAdapter,
         "instagram": InstagramAdapter,
         "linkedin":  LinkedInAdapter,
@@ -43,6 +41,38 @@ def _registry() -> dict[str, type[BasePlatformAdapter]]:
         "x":         XAdapter,
         "youtube":   YouTubeAdapter,
     }
+
+
+def _resolve_adapter(platform: str) -> type[BasePlatformAdapter] | None:
+    """PREFER_API → try API registry first; if the API class is still the
+    UnregisteredAPIAdapter stub, return the Playwright fallback instead."""
+    from .api_adapters import API_REGISTRY, UnregisteredAPIAdapter
+    pw = _playwright_registry()
+    pw_cls = pw.get(platform)
+    api_cls = API_REGISTRY.get(platform)
+
+    if api_cls is not None and not issubclass(api_cls, UnregisteredAPIAdapter):
+        return api_cls
+    if pw_cls is not None and getattr(pw_cls, "PREFER_API", True) is False:
+        return pw_cls
+    if api_cls is not None:
+        return api_cls  # the stub — will raise APINotRegisteredError, caught below
+    return pw_cls
+
+
+def _registry() -> dict[str, type[BasePlatformAdapter]]:
+    """Legacy accessor used by run_queue iteration. Each lookup now goes
+    through _resolve_adapter for the PREFER_API fallback."""
+    platforms = (
+        "bluesky", "facebook", "instagram", "linkedin", "medium", "nextdoor",
+        "pinterest", "quora", "threads", "tiktok", "x", "youtube",
+    )
+    out: dict[str, type[BasePlatformAdapter]] = {}
+    for p in platforms:
+        cls = _resolve_adapter(p)
+        if cls is not None:
+            out[p] = cls
+    return out
 
 
 @dataclass
@@ -94,9 +124,29 @@ async def dispatch_item(content_row: dict[str, Any], *, dry_run: bool) -> list[D
 
 async def _run_one(cls: type[BasePlatformAdapter], platform: str,
                    payload: PostContent, dry_run: bool, content_id: str) -> DispatchRow:
+    from .api_adapters import APINotRegisteredError
+
     adapter = cls(dry_run=dry_run)
     try:
         await adapter.login()
+    except APINotRegisteredError:
+        # Fall back to Playwright sibling if the API tokens aren't set yet.
+        pw = _playwright_registry().get(platform)
+        if pw is None:
+            return DispatchRow(content_id, platform, adapter.method,
+                               "skipped_not_implemented",
+                               error="no playwright fallback for platform")
+        log.info("api_unregistered_fallback_playwright", extra={"platform": platform})
+        adapter = pw(dry_run=dry_run)
+        try:
+            await adapter.login()
+        except NotImplementedError:
+            return DispatchRow(content_id, platform, adapter.method,
+                               "skipped_not_implemented",
+                               error="playwright login not implemented")
+        except Exception as e:
+            return DispatchRow(content_id, platform, adapter.method,
+                               "failed", error=str(e)[:300])
     except NotImplementedError:
         return DispatchRow(content_id, platform, adapter.method,
                            "skipped_not_implemented",
