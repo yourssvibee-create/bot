@@ -1,0 +1,52 @@
+[
+  {
+    "id": "pp_01",
+    "title": "Responding to negative Google reviews",
+    "context": "Small businesses freeze on 1-star reviews. The question is what to say, how fast, and whether to reply publicly or go private first."
+  },
+  {
+    "id": "pp_02",
+    "title": "Getting more customer reviews without being pushy",
+    "context": "Owners assume asking is annoying. The right moment, channel, and script lifts response rates 3-5x without losing the room."
+  },
+  {
+    "id": "pp_03",
+    "title": "Why star rating alone doesn't predict customer trust",
+    "context": "4.9 with 12 reviews beats 4.4 with 400 for raw rating but loses on trust signals. Recency, response rate, and photo count matter more than owners think."
+  },
+  {
+    "id": "pp_04",
+    "title": "The hidden cost of unanswered reviews",
+    "context": "An unanswered review is a dropped conversation in public. Google's local pack appears to weight response rate; conversion funnels prove it."
+  },
+  {
+    "id": "pp_05",
+    "title": "Multi-location review management without going insane",
+    "context": "10+ locations, each with a manager who thinks review response is HQ's job. The SLA, the template library, and the escalation path that actually scale."
+  },
+  {
+    "id": "pp_06",
+    "title": "Using reviews as a lead magnet",
+    "context": "Asking in person vs. SMS vs. post-purchase email — each has a different conversion rate and a different kind of review at the end of it."
+  },
+  {
+    "id": "pp_07",
+    "title": "Response templates for one-star 'didn't read the menu' complaints",
+    "context": "The customer is wrong on the facts, publicly. A template that defends the business without looking defensive, in under 60 words."
+  },
+  {
+    "id": "pp_08",
+    "title": "When to publicly rebut a dishonest review vs. let it sit",
+    "context": "Public rebuttal can backfire — the Streisand effect is real. The rule of thumb for which fights are worth having and which die faster unanswered."
+  },
+  {
+    "id": "pp_09",
+    "title": "Why a 4.7-star business can lose to a 4.3-star one",
+    "context": "Review recency, response rate, and photo count move the local-pack ranking even when average rating is lower. Fix the three inputs you control."
+  },
+  {
+    "id": "pp_10",
+    "title": "Chain franchises: enforcing review-response SLAs across 20+ locations",
+    "context": "Without a 9-5 ops manager, you need a system: shared template library, response-time SLA, per-location scorecard, and a Friday escalation ping."
+  }
+]
