@@ -53,6 +53,9 @@ class PlaywrightAdapter(BasePlatformAdapter):
     async def login(self) -> None:
         """Launch persistent context; if not authed, try form-fill then bail
         with a clear message so the human can finish headed, once."""
+        if self.dry_run:
+            log.info("playwright_login_skip_dry", extra={"platform": self.platform})
+            return
         from playwright.async_api import async_playwright
 
         self._pw = await async_playwright().start()
@@ -102,6 +105,10 @@ class PlaywrightAdapter(BasePlatformAdapter):
         the platform requires human-in-the-loop (captcha, SMS, etc.)."""
 
     async def post(self, content: PostContent) -> PostResult:
+        if self.dry_run:
+            log.info("playwright_post_dry", extra={"platform": self.platform,
+                                                   "chars": len(content.caption)})
+            return PostResult(ok=True, platform=self.platform)
         raise NotImplementedError(
             f"{self.platform}.post() is not yet implemented — "
             "revisit per-platform tomorrow (official API vs Playwright)."
