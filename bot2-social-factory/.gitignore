@@ -24,3 +24,6 @@ supabase/.branches/
 
 .vercel
 .env*
+
+.renders/
+.media-cache/
