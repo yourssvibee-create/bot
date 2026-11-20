@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Block pushes unless the active gh account on github.com is yourssvibee-create.
+set -euo pipefail
+
+EXPECTED="yourssvibee-create"
+
+if ! command -v gh >/dev/null 2>&1; then
+    echo "pre-push: gh CLI not found; cannot verify GitHub identity." >&2
+    exit 1
+fi
+
+# Parse `gh auth status` for the active github.com account.
+# Format (as of gh 2.x):
+#   github.com
+#     ✓ Logged in to github.com account <name> (...)
+#     ...
+#     - Active account: true
+status="$(gh auth status 2>&1 || true)"
+active=$(printf '%s\n' "$status" | awk '
+    /^github\.com$/        { host=1; next }
+    host && /account /      { match($0, /account [^ ]+/); name=substr($0, RSTART+8, RLENGTH-8); gsub(/[^A-Za-z0-9._-]/, "", name); last=name }
+    host && /Active account: true/ { print last; exit }
+')
+
+if [ -z "$active" ]; then
+    echo "pre-push: could not determine active gh account on github.com." >&2
+    echo "         Run: gh auth status" >&2
+    exit 1
+fi
+
+if [ "$active" != "$EXPECTED" ]; then
+    echo "Push blocked: active gh account is not $EXPECTED." >&2
+    echo "Run: gh auth switch -u $EXPECTED" >&2
+    exit 1
+fi
+
+exit 0
