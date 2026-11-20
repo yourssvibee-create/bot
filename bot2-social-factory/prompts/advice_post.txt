@@ -25,9 +25,44 @@ STRUCTURE (the default — the "advice post" long form)
 PLATFORM FORMAT ({format_name})
 {format_block}
 
-REFERENCE SAMPLE (study this voice — do not copy verbatim)
-<<<
-{reference_sample}
+REFERENCE SAMPLES (anchor to this voice — study rhythm, specificity, mechanism-depth)
+
+<<< SAMPLE 1 — responding to bad Google reviews
+Three rules that actually work:
+
+Reply within 48 hours or don't bother. After that, Google treats you as an inactive profile and it hurts your local ranking more than the bad review itself does.
+Don't defend, acknowledge. Even if the customer is wrong. Future readers don't care who was right — they care how you handled it. A defensive reply loses that test every time.
+Keep the public reply to three sentences. Take the actual dispute to private email.
+
+Template that works: "Hi [Name], I'm sorry your experience didn't match what we aim for. I'd like to make this right — could you email me directly at [your email]?"
+
+That's it. Reply fast, stay calm, move the fight offline.
+
+I built a tool (Ominvo — ominvo.com) that helps small businesses do this without hiring an agency, but the advice above works whether you use it or not.
+>>>
+
+<<< SAMPLE 2 — why a 4.7-star business loses to a 4.3-star one
+Everyone obsesses over star rating. Nobody looks at the three things that actually move the ranking.
+
+Review recency matters more than total count. A business with 40 reviews in the last 90 days outranks one with 400 reviews from three years ago. Google's local algorithm decays old reviews fast. If your last review was in June, you're invisible by October.
+Response rate is the hidden tiebreaker. Two businesses at 4.5 stars, same city, same category — the one responding to 80% of reviews beats the one at 20%. The algorithm reads replies as "this business is active" and ranks accordingly.
+Photo count on your profile beats half a star of rating. Businesses with 100+ customer photos outrank 4.9-star profiles with 20 photos. Photos are the signal Google trusts most for "this place exists and people go there."
+
+Quick audit: open your Google Business Profile → check review age of the last 10 → check reply rate → check photo count. If any looks weak, that's your fix before you worry about star rating.
+
+I built a tool (Ominvo — ominvo.com) that watches all three signals and alerts when any slip, but the audit above you can do in 10 minutes without it.
+>>>
+
+<<< SAMPLE 3 — getting more reviews without being pushy
+Most owners ask wrong. They send a link and hope. The ones getting 30 reviews a month do three things differently.
+
+Ask at the moment, not later. In-person at checkout, while the customer is holding the thing they bought — that's a 60% response rate. An email the next day is under 10%. Every hour you wait, the number drops.
+Make the link one tap, not six. A QR code on the receipt that opens Google's review form directly. No app to install, no account to make, no form to fill. The second there's friction, the review doesn't happen.
+Never ask twice from the same channel. If you emailed once and got nothing, don't email again. Try SMS. Then in-person. The silent customer isn't ignoring you — they didn't see the first ask.
+
+Script that works: at checkout, hand them the receipt, say "If you had a good time, a quick Google review helps us a ton — I'll text you the link if that's easier." Then actually text it.
+
+I built a tool (Ominvo — ominvo.com) that handles the SMS + QR + timing without you thinking about it, but the three rules above work whether you use it or not.
 >>>
 
 Produce the content now. Return only the finished post body; no preamble, no

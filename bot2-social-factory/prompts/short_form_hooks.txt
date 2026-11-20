@@ -1,0 +1,33 @@
+# Ominvo short-form hooks, grouped by archetype.
+# One hook per line. Comments start with #.
+# Use these for X, Bluesky, Threads, IG/TikTok/Reel captions, Pinterest pins, Shorts titles.
+
+# --- Specific Number (4) ---
+48 hours is the window. Reply inside it or Google treats you as inactive.
+40 recent reviews beat 400 old ones. Local ranking is a recency game.
+Review response rate above 80% ranks you above a 4.9-star competitor stuck at 20%.
+100 customer photos on your profile outranks half a star of rating. That's the trade.
+
+# --- Contrarian (4) ---
+Star rating is not what's ranking you. Response rate is.
+Stop asking for reviews by email. In-person at checkout is 6x the response rate.
+Defending yourself in review replies loses future readers. Acknowledging wins them.
+More reviews is not the fix. Fresher reviews is the fix.
+
+# --- Curiosity Gap (4) ---
+The reason a 4.3-star shop is outranking your 4.7 is one you can fix in 10 minutes.
+Three things move Google local ranking. None of them are your star rating.
+There is a reason your email review requests convert under 10%. It's not your copy.
+Your worst review is helping you — if you reply to it the right way.
+
+# --- Shock Stat (4) ---
+A review older than 90 days is nearly invisible to Google's local algorithm.
+An email ask the day after purchase converts at under 10%. In-person at checkout: 60%.
+Businesses responding to 80% of reviews outrank identical ones replying to 20%.
+Profiles with 100+ customer photos beat 4.9-star profiles with 20 photos. Every time.
+
+# --- Pattern Interrupt (4) ---
+Your star rating is not your problem.
+A one-star review from last week is better for your ranking than a five-star from 2023.
+The fastest reply wins the ranking, not the best reply.
+If you're emailing for reviews, you're losing to the competitor who asks at the register.

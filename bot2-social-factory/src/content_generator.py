@@ -25,6 +25,16 @@ log = get_logger("bot2.content")
 
 _PROMPTS_DIR = Path(__file__).resolve().parents[1] / "prompts"
 
+# Platforms whose primary body is a long advice-post (anchor: advice_post.txt).
+LONG_FORM_PLATFORMS: set[str] = {
+    "reddit", "quora", "linkedin", "medium", "nextdoor",
+}
+# Platforms whose primary body is a short hook (anchor: short_form_hooks.txt).
+SHORT_FORM_PLATFORMS: set[str] = {
+    "x", "bluesky", "threads",
+    "instagram", "tiktok", "pinterest", "youtube",
+}
+
 
 # ---- per-content-type format blocks substituted into the prompt template -----
 
@@ -104,6 +114,18 @@ def _load_prompt_template() -> str:
     return (_PROMPTS_DIR / "advice_post.txt").read_text(encoding="utf-8")
 
 
+def load_short_hooks() -> list[str]:
+    """Return hooks from short_form_hooks.txt, skipping blank/comment lines."""
+    raw = (_PROMPTS_DIR / "short_form_hooks.txt").read_text(encoding="utf-8")
+    out = []
+    for line in raw.splitlines():
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        out.append(s)
+    return out
+
+
 def _format_for_content_type(content_type: str, platform_hint: str) -> tuple[str, str]:
     """Return (format_name, format_block) for the given content_type."""
     if content_type == "tweet":
@@ -162,11 +184,27 @@ def _stub_content(content_type: str, pain_point: dict[str, Any]) -> str:
 
 
 async def _generate_one(content_type: str, pain_point: dict[str, Any],
-                        platform_hint: str, *, dry_run: bool) -> str:
+                        platform_hint: str, *, dry_run: bool,
+                        hook: str | None = None) -> str:
     if dry_run:
         return _stub_content(content_type, pain_point)
     # Lazy import so dry-run works without shared.llm deps installed.
     from shared.llm import draft  # type: ignore[attr-defined]
+
+    # Short-form platforms get a hook-anchored prompt that expands one line
+    # from short_form_hooks.txt into a platform-shaped body. Long-form
+    # platforms get the full advice_post.txt template.
+    if platform_hint in SHORT_FORM_PLATFORMS and hook:
+        system = (
+            "You are Dave Fieldston @ Ominvo. Expand the hook below into a "
+            f"short post for {platform_hint}. Match the voice of the advice-"
+            "post samples: short sentences, specific thresholds, mechanism-"
+            "level why, no emojis, no hashtags. Close with the disclosed "
+            "Ominvo mention. Output only the finished post body."
+        )
+        user = f"HOOK: {hook}\nPAIN POINT: {pain_point['title']} — {pain_point['context']}"
+        return await draft(system, user, temperature=0.7, max_tokens=800)
+
     system, user = _build_prompt(content_type, pain_point, platform_hint)
     return await draft(system, user, temperature=0.7, max_tokens=1200)
 
@@ -189,11 +227,14 @@ async def generate_daily(*, dry_run: bool = False, seed: int | None = None) -> l
         ("tweet",    "threads"),
     ]
 
+    hooks = load_short_hooks()
     items: list[ContentItem] = []
     chosen_points = rng.sample(points, k=min(len(plan), len(points)))
     for i, (ctype, platform_hint) in enumerate(plan):
         pp = chosen_points[i % len(chosen_points)]
-        caption = await _generate_one(ctype, pp, platform_hint, dry_run=dry_run)
+        hook = rng.choice(hooks) if hooks and platform_hint in SHORT_FORM_PLATFORMS else None
+        caption = await _generate_one(ctype, pp, platform_hint,
+                                      dry_run=dry_run, hook=hook)
         items.append(ContentItem(
             content_type=ctype,
             caption=caption,

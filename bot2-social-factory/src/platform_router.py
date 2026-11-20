@@ -14,6 +14,7 @@ from shared.config import get, require_bot_id
 from shared.logging import get_logger
 
 from .base_adapter import BasePlatformAdapter, PostContent, PostResult
+from . import safety
 
 log = get_logger("bot2.router")
 
@@ -121,6 +122,9 @@ async def _run_one(cls: type[BasePlatformAdapter], platform: str,
     status = "posted" if res.ok else "failed"
     if dry_run and res.ok:
         status = "skipped_dry_run"
+    if status == "failed" and safety.is_red_flag(res.error):
+        safety.on_red_flag(platform, res.error or "")
+        status = "red_flag"
     return DispatchRow(content_id, platform, adapter.method, status,
                        external_url=res.external_url, error=res.error)
 
