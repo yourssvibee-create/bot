@@ -37,7 +37,7 @@ async def _build_queue_rows(dry_run: bool, seed: int | None) -> list[dict[str, A
             # Pick one query based on pain point for Pexels
             query = it.pain_point_id.replace("pp_", "small business reviews ")
             try:
-                media = await render(query, provider="pexels", n=1, dry_run=False)
+                media = await render(query, provider="pixabay", n=1, dry_run=False)
             except Exception as e:
                 log.warning("media_render_fail",
                             extra={"err": str(e)[:200], "pp": it.pain_point_id})

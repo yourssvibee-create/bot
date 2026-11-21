@@ -19,7 +19,7 @@ from shared.config import require_bot_id
 from shared.logging import get_logger
 
 from src import content_generator as cg
-from src.video_pipeline import (VideoSegment, fetch_pexels_clip,
+from src.video_pipeline import (VideoSegment, fetch_pixabay_clip,
                                 make_placeholder_clip, probe_duration,
                                 render_root, stitch, synthesize_tts)
 
@@ -72,9 +72,9 @@ async def build_short(*, dry_run: bool, slug: str | None, seed: int | None) -> P
     clip = None
     if not dry_run:
         try:
-            clip = await fetch_pexels_clip(hook, broll_path)
+            clip = await fetch_pixabay_clip(hook, broll_path)
         except Exception as e:
-            log.warning("pexels_fail", extra={"err": str(e)[:200]})
+            log.warning("pixabay_fail", extra={"err": str(e)[:200]})
     if clip is None:
         make_placeholder_clip(broll_path, duration, width=1080, height=1920)
 

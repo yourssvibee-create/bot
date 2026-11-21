@@ -50,6 +50,31 @@ async def fetch_pexels(query: str, *, per_page: int = 3, orientation: str = "lan
     return [p["src"]["large"] for p in photos if "src" in p]
 
 
+async def fetch_pixabay(query: str, *, per_page: int = 3, orientation: str = "horizontal") -> list[str]:
+    """Return URLs for up to `per_page` Pixabay photos matching `query`.
+    Replaces Pexels (API paused globally Nov 2026)."""
+    api_key = get("PIXABAY_API_KEY")
+    if not api_key:
+        log.warning("pixabay_no_key", extra={"query": query})
+        return []
+    async with httpx.AsyncClient(timeout=20) as c:
+        r = await c.get(
+            "https://pixabay.com/api/",
+            params={
+                "key": api_key,
+                "q": query,
+                "per_page": max(per_page, 3),
+                "orientation": orientation,
+                "image_type": "photo",
+                "safesearch": "true",
+            },
+        )
+        r.raise_for_status()
+        data = r.json()
+    hits = data.get("hits", [])
+    return [h["largeImageURL"] for h in hits[:per_page] if h.get("largeImageURL")]
+
+
 async def _download(url: str) -> str:
     p = _cache_path(url)
     if p.exists() and p.stat().st_size > 0:
@@ -71,7 +96,8 @@ async def render(query: str, *, provider: Provider = "pexels",
         urls = await fetch_pexels(query, per_page=n)
         return await asyncio.gather(*[_download(u) for u in urls]) if urls else []
     if provider == "pixabay":
-        raise NotImplementedError("pixabay provider not yet implemented")
+        urls = await fetch_pixabay(query, per_page=n)
+        return await asyncio.gather(*[_download(u) for u in urls]) if urls else []
     if provider == "flux_schnell":
         raise NotImplementedError("flux_schnell (HF Inference) not yet implemented")
     raise ValueError(f"unknown provider: {provider}")

@@ -170,3 +170,44 @@ async def fetch_pexels_clip(query: str, out_path: Path) -> Path | None:
         r.raise_for_status()
         out_path.write_bytes(r.content)
     return out_path
+
+
+async def fetch_pixabay_clip(query: str, out_path: Path) -> Path | None:
+    """Download one Pixabay video clip matching `query`. Returns None if no
+    key or no result. Replaces Pexels (API paused globally Nov 2026)."""
+    import httpx
+    api_key = get("PIXABAY_API_KEY")
+    if not api_key:
+        log.warning("pixabay_no_key", extra={"query": query})
+        return None
+    async with httpx.AsyncClient(timeout=30, follow_redirects=True) as c:
+        r = await c.get(
+            "https://pixabay.com/api/videos/",
+            params={
+                "key": api_key,
+                "q": query,
+                "video_type": "film",
+                "per_page": 3,
+                "safesearch": "true",
+            },
+        )
+        r.raise_for_status()
+        data = r.json()
+    hits = data.get("hits") or []
+    if not hits:
+        return None
+    videos = hits[0].get("videos") or {}
+    # Prefer large (1080p+), fall back to medium (720p), then small
+    for tier in ("large", "medium", "small"):
+        v = videos.get(tier) or {}
+        url = v.get("url")
+        if url:
+            break
+    else:
+        return None
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    async with httpx.AsyncClient(timeout=120, follow_redirects=True) as c:
+        r = await c.get(url)
+        r.raise_for_status()
+        out_path.write_bytes(r.content)
+    return out_path

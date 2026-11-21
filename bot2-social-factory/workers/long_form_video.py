@@ -19,7 +19,7 @@ from shared.config import require_bot_id
 from shared.logging import get_logger
 
 from src import content_generator as cg
-from src.video_pipeline import (VideoSegment, fetch_pexels_clip,
+from src.video_pipeline import (VideoSegment, fetch_pixabay_clip,
                                 make_placeholder_clip, probe_duration,
                                 render_root, stitch, synthesize_tts)
 
@@ -109,9 +109,9 @@ async def build_long(*, dry_run: bool, as_of: date) -> Path:
         clip = None
         if not dry_run:
             try:
-                clip = await fetch_pexels_clip(pp["title"], broll_path)
+                clip = await fetch_pixabay_clip(pp["title"], broll_path)
             except Exception as e:
-                log.warning("pexels_fail", extra={"err": str(e)[:200], "seg": i})
+                log.warning("pixabay_fail", extra={"err": str(e)[:200], "seg": i})
         if clip is None:
             # alternate two colors so the placeholder video isn't one solid frame
             color = "0x0f172a" if i % 2 == 0 else "0x1e293b"
