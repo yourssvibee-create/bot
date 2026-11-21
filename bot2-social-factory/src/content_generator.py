@@ -235,8 +235,20 @@ async def _generate_one(content_type: str, pain_point: dict[str, Any],
                             temperature=0.7, max_tokens=1200)
 
 
-async def generate_daily(*, dry_run: bool = False, seed: int | None = None) -> list[ContentItem]:
-    """Generate one day's content queue: 2 reels + 1 carousel + 1 long + 3 tweets."""
+async def generate_daily(
+    *, dry_run: bool = False, seed: int | None = None,
+    count: int | None = None,
+    force_platform: str | None = None,
+    force_type: str | None = None,
+) -> list[ContentItem]:
+    """Generate one day's content queue: 2 reels + 1 carousel + 1 long + 3 tweets.
+
+    Overrides for testing / single-platform seeding runs:
+      count          — truncate the plan to the first N items
+      force_platform — replace every item's platform with this one
+      force_type     — replace every item's content_type (plan still picks
+                       pain points and hook/long branching based on the new type)
+    """
     require_bot_id({"bot2"})
     rng = random.Random(seed)
     points = load_pain_points()
@@ -252,6 +264,10 @@ async def generate_daily(*, dry_run: bool = False, seed: int | None = None) -> l
         ("tweet",    "bluesky"),
         ("tweet",    "threads"),
     ]
+    if force_type or force_platform:
+        plan = [((force_type or t), (force_platform or p)) for t, p in plan]
+    if count is not None:
+        plan = plan[:max(count, 0)]
 
     hooks = load_short_hooks()
     items: list[ContentItem] = []
