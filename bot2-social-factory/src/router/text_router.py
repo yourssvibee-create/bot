@@ -27,8 +27,8 @@ from shared.llm import draft_attributed
 # router can still try it) and can be re-added here by adding "gemini" back
 # into any list below once billing is enabled.
 POOLS: dict[str, list[str]] = {
-    "hook":      ["groq"],
-    "long_form": ["nvidia", "openrouter"],
+    "hook":      ["groq", "nvidia", "openrouter"],
+    "long_form": ["groq", "nvidia", "openrouter"],
     "caption":   ["groq", "nvidia", "openrouter"],
     "default":   ["groq", "nvidia", "openrouter"],
 }
