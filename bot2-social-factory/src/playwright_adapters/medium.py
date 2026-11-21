@@ -120,15 +120,16 @@ async def _run_verify_only() -> int:
                      if adapter._ctx.pages else await adapter._ctx.new_page())
     page = adapter._page
 
-    await page.goto(adapter.home_url, wait_until="domcontentloaded")
-    authed = await adapter._is_logged_in()
-    print(f"[login] logged_in_selector={adapter.logged_in_selector!r} "
-          f"authed={'GREEN' if authed else 'RED — finish headed login first'}")
-    if not authed:
+    # URL-based login gate: /new-story is auth-gated. If cookies are stale
+    # Medium bounces to /m/signin. The `logged_in_selector` constant is kept
+    # on the class for homepage checks but is unreliable on the editor view
+    # (minimal nav, no /me link in the DOM).
+    await page.goto("https://medium.com/new-story", wait_until="networkidle")
+    if "/signin" in page.url or "/m/signin" in page.url:
+        print(f"[login] RED — redirected to {page.url}; re-seed cookies headed once")
         await adapter._ctx.close()
         return 2
-
-    await page.goto("https://medium.com/new-story", wait_until="domcontentloaded")
+    print(f"[login] GREEN — editor at {page.url}")
     # Give the Medium editor a moment to hydrate.
     await page.wait_for_timeout(2500)
 
@@ -172,14 +173,13 @@ async def _run_probe_publish() -> int:
                      if adapter._ctx.pages else await adapter._ctx.new_page())
     page = adapter._page
 
-    await page.goto(adapter.home_url, wait_until="domcontentloaded")
-    if not await adapter._is_logged_in():
-        print("[login] RED — finish headed login first; see profile_dir README")
+    # URL-based login gate — see --verify-only for rationale.
+    await page.goto("https://medium.com/new-story", wait_until="networkidle")
+    if "/signin" in page.url or "/m/signin" in page.url:
+        print(f"[login] RED — redirected to {page.url}; re-seed cookies headed once")
         await adapter._ctx.close()
         return 2
-    print("[login] GREEN")
-
-    await page.goto("https://medium.com/new-story", wait_until="domcontentloaded")
+    print(f"[login] GREEN — editor at {page.url}")
     await page.wait_for_timeout(2500)
     await page.locator("h3.graf--title").fill(_PROBE_DRAFT_TITLE)
     await page.locator("p.graf-after--h3").fill(_PROBE_DRAFT_BODY)
