@@ -21,8 +21,8 @@ class NvidiaProvider(Provider):
 
     def model_for(self, role: str) -> str:
         if role == "draft":
-            return get("NVIDIA_MODEL_DRAFT", "meta/llama-3.3-70b-instruct")  # type: ignore[return-value]
-        return get("NVIDIA_MODEL_SCORE", "meta/llama-3.1-8b-instruct")  # type: ignore[return-value]
+            return get("NVIDIA_MODEL_DRAFT", "nvidia/nemotron-3.5-super-vl-120b-a12b")  # type: ignore[return-value]
+        return get("NVIDIA_MODEL_SCORE", "nvidia/nemotron-3.5-super-vl-120b-a12b")  # type: ignore[return-value]
 
     async def draft(self, system: str, user: str, *,
                     temperature: float = 0.7, max_tokens: int = 1600) -> str:

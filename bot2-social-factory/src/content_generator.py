@@ -94,6 +94,12 @@ class ContentItem:
     media_urls: list[str] = field(default_factory=list)
     target_platforms: list[str] = field(default_factory=list)
     pain_point_id: str = ""
+    # Which LLM served this caption — surfaced in the Telegram digest and
+    # useful for tracing "why does this post sound different today."
+    text_provider: str = "stub"
+    # Which image provider(s) served the media — populated by the pipeline
+    # after images render.
+    image_providers: list[str] = field(default_factory=list)
 
     def as_row(self) -> dict[str, Any]:
         """Row shape matching bot2_content_queue."""
@@ -183,13 +189,31 @@ def _stub_content(content_type: str, pain_point: dict[str, Any]) -> str:
     )
 
 
+def _pool_for(content_type: str, platform_hint: str, has_hook: bool) -> str:
+    """Pick the text router pool by content shape.
+
+    hook      — short punchy single-post / short-form platforms with a hook
+    long_form — long-form essays (Reddit, LinkedIn, Medium) + the "long" ctype
+    default   — everything else (tweets, reels, carousels)
+    """
+    if content_type == "long" or platform_hint in LONG_FORM_PLATFORMS:
+        return "long_form"
+    if has_hook and platform_hint in SHORT_FORM_PLATFORMS:
+        return "hook"
+    return "default"
+
+
 async def _generate_one(content_type: str, pain_point: dict[str, Any],
                         platform_hint: str, *, dry_run: bool,
-                        hook: str | None = None) -> str:
+                        seed: int,
+                        hook: str | None = None) -> tuple[str, str]:
+    """Return (caption, provider_key). provider_key='stub' in dry-run."""
     if dry_run:
-        return _stub_content(content_type, pain_point)
+        return _stub_content(content_type, pain_point), "stub"
     # Lazy import so dry-run works without shared.llm deps installed.
-    from shared.llm import draft  # type: ignore[attr-defined]
+    from src.router.text_router import generate as route_text
+
+    pool = _pool_for(content_type, platform_hint, hook is not None)
 
     # Short-form platforms get a hook-anchored prompt that expands one line
     # from short_form_hooks.txt into a platform-shaped body. Long-form
@@ -203,10 +227,12 @@ async def _generate_one(content_type: str, pain_point: dict[str, Any],
             "Ominvo mention. Output only the finished post body."
         )
         user = f"HOOK: {hook}\nPAIN POINT: {pain_point['title']} — {pain_point['context']}"
-        return await draft(system, user, temperature=0.7, max_tokens=800)
+        return await route_text(user, seed=seed, pool=pool, system=system,
+                                temperature=0.7, max_tokens=800)
 
     system, user = _build_prompt(content_type, pain_point, platform_hint)
-    return await draft(system, user, temperature=0.7, max_tokens=1200)
+    return await route_text(user, seed=seed, pool=pool, system=system,
+                            temperature=0.7, max_tokens=1200)
 
 
 async def generate_daily(*, dry_run: bool = False, seed: int | None = None) -> list[ContentItem]:
@@ -230,21 +256,29 @@ async def generate_daily(*, dry_run: bool = False, seed: int | None = None) -> l
     hooks = load_short_hooks()
     items: list[ContentItem] = []
     chosen_points = rng.sample(points, k=min(len(plan), len(points)))
+    # Base seed for this run; each content item gets base_seed + i so the
+    # provider rotation is deterministic within a run but varies across items.
+    base_seed = seed if seed is not None else rng.randint(0, 2**31 - 1)
     for i, (ctype, platform_hint) in enumerate(plan):
         pp = chosen_points[i % len(chosen_points)]
         hook = rng.choice(hooks) if hooks and platform_hint in SHORT_FORM_PLATFORMS else None
-        caption = await _generate_one(ctype, pp, platform_hint,
-                                      dry_run=dry_run, hook=hook)
+        item_seed = base_seed + i
+        caption, provider = await _generate_one(
+            ctype, pp, platform_hint,
+            dry_run=dry_run, hook=hook, seed=item_seed,
+        )
         items.append(ContentItem(
             content_type=ctype,
             caption=caption,
             media_urls=[],
             target_platforms=list(TARGET_PLATFORMS.get(ctype, [])),
             pain_point_id=pp["id"],
+            text_provider=provider,
         ))
         log.info("content_generated",
                  extra={"content_type": ctype, "pain_point": pp["id"],
-                        "chars": len(caption), "dry_run": dry_run})
+                        "chars": len(caption), "dry_run": dry_run,
+                        "provider": provider, "seed": item_seed})
     return items
 
 

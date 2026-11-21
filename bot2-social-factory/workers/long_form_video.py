@@ -19,6 +19,7 @@ from shared.config import require_bot_id
 from shared.logging import get_logger
 
 from src import content_generator as cg
+from src.media.typography import phrases_from_script, render_typography_video
 from src.video_pipeline import (VideoSegment, fetch_pixabay_clip,
                                 make_placeholder_clip, probe_duration,
                                 render_root, stitch, synthesize_tts)
@@ -26,6 +27,17 @@ from src.video_pipeline import (VideoSegment, fetch_pixabay_clip,
 log = get_logger("bot2.long_form")
 
 SEG_WORDS = 70  # ~30s of narration at ~140wpm
+
+# See workers/short_form_video.py for rationale.
+_PIXABAY_TRIGGERS = {
+    "restaurant", "cafe", "office", "store", "laptop", "phone",
+    "meeting", "team", "customer", "shop", "kitchen", "storefront",
+}
+
+
+def _needs_real_footage(script: str) -> bool:
+    low = script.lower()
+    return any(t in low for t in _PIXABAY_TRIGGERS)
 
 
 def should_run_today(d: date) -> bool:
@@ -58,10 +70,12 @@ def split_segments(script: str) -> list[str]:
     return [s for s in out if s.strip()]
 
 
-async def _generate_script(pain_point: dict, dry_run: bool) -> str:
+async def _generate_script(pain_point: dict, dry_run: bool,
+                           seed: int) -> tuple[str, str]:
+    """Return (script, provider_key). provider='stub' in dry-run."""
     if dry_run:
-        return _script_stub(pain_point)
-    from shared.llm import draft  # type: ignore[attr-defined]
+        return _script_stub(pain_point), "stub"
+    from src.router.text_router import generate as route_text
     system = (
         "You are Dave Fieldston @ Ominvo. Write a 1800-word video script on "
         "the given topic in your contrarian-but-kind voice. Plain prose, no "
@@ -69,7 +83,8 @@ async def _generate_script(pain_point: dict, dry_run: bool) -> str:
         "a disclosed Ominvo close."
     )
     user = f"TOPIC: {pain_point['title']}\n{pain_point['context']}"
-    return await draft(system, user, temperature=0.6, max_tokens=4000)
+    return await route_text(user, seed=seed, pool="long_form", system=system,
+                            temperature=0.6, max_tokens=4000)
 
 
 async def build_long(*, dry_run: bool, as_of: date) -> Path:
@@ -78,9 +93,13 @@ async def build_long(*, dry_run: bool, as_of: date) -> Path:
     # Deterministic pain-point pick from the date ordinal.
     pp = points[as_of.toordinal() % len(points)]
 
-    script = await _generate_script(pp, dry_run=dry_run)
+    # Seed off the date ordinal so reruns are deterministic.
+    seed = as_of.toordinal()
+    script, text_provider = await _generate_script(pp, dry_run=dry_run, seed=seed)
     segments = split_segments(script)
-    log.info("long_form_segments", extra={"n": len(segments), "pp": pp["id"]})
+    log.info("long_form_segments", extra={
+        "n": len(segments), "pp": pp["id"], "provider": text_provider,
+    })
 
     out_dir = render_root("long_form")
     slug = _slugify(pp["title"])
@@ -106,16 +125,35 @@ async def build_long(*, dry_run: bool, as_of: date) -> Path:
         duration = probe_duration(audio_path) or 2.0
 
         broll_path = out_dir / f".{slug}_broll{i:03d}.mp4"
-        clip = None
-        if not dry_run:
+        visual_source = "placeholder"
+        use_pixabay = _needs_real_footage(seg_text)
+
+        if not dry_run and use_pixabay:
             try:
                 clip = await fetch_pixabay_clip(pp["title"], broll_path)
+                if clip is not None:
+                    visual_source = "pixabay"
             except Exception as e:
                 log.warning("pixabay_fail", extra={"err": str(e)[:200], "seg": i})
-        if clip is None:
-            # alternate two colors so the placeholder video isn't one solid frame
+
+        if not dry_run and visual_source == "placeholder":
+            try:
+                phrases = phrases_from_script(seg_text, duration)
+                # landscape 1920x1080 for long-form
+                render_typography_video(phrases, audio_path, broll_path,
+                                        size=(1920, 1080))
+                visual_source = "typography"
+            except Exception as e:
+                log.warning("typography_fail",
+                            extra={"err": str(e)[:200], "seg": i})
+
+        if visual_source == "placeholder":
+            # alternate two colors so the placeholder isn't one solid frame
             color = "0x0f172a" if i % 2 == 0 else "0x1e293b"
             make_placeholder_clip(broll_path, duration, color=color)
+
+        log.debug("long_form_seg_visual",
+                  extra={"seg": i, "source": visual_source})
 
         seg_objects.append(VideoSegment(
             text=seg_text, audio_path=audio_path, broll_path=broll_path,

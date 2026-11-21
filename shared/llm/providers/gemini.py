@@ -42,8 +42,8 @@ class GeminiProvider(Provider):
 
     def model_for(self, role: str) -> str:
         if role == "draft":
-            return get("GEMINI_MODEL_DRAFT", "gemini-2.0-flash-exp")  # type: ignore[return-value]
-        return get("GEMINI_MODEL_SCORE", "gemini-2.0-flash-exp")  # type: ignore[return-value]
+            return get("GEMINI_MODEL_DRAFT", "gemini-2.5-flash")  # type: ignore[return-value]
+        return get("GEMINI_MODEL_SCORE", "gemini-2.5-flash")  # type: ignore[return-value]
 
     async def draft(self, system: str, user: str, *,
                     temperature: float = 0.7, max_tokens: int = 1600) -> str:

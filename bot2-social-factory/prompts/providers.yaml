@@ -1,0 +1,36 @@
+# Content-type -> provider pool. Nightly orchestrator reads this to pick
+# which router / pool is used per task.
+hook_tweet:       {pool: hook,       router: text}
+long_form_tweet:  {pool: long_form,  router: text}
+reel_script:      {pool: default,    router: text}
+long_form_video:  {pool: long_form,  router: text}
+carousel_slide:   {router: image}
+thumbnail:        {router: image}
+
+# B-roll strategy. "typography" is the default visual path.
+# "pixabay" kicks in only when the script contains any trigger token below,
+# because kinetic typography loses to real footage for physical / sensory
+# content ("show me a restaurant" reads better with a real restaurant clip
+# than animated text).
+broll:
+  primary: typography
+  fallback: pixabay
+  pixabay_triggers:
+    - restaurant
+    - cafe
+    - office
+    - store
+    - laptop
+    - phone
+    - meeting
+    - team
+    - customer
+    - shop
+    - kitchen
+    - storefront
+
+narration_voices:
+  - en-US-AriaNeural
+  - en-US-GuyNeural
+  - en-US-JennyNeural
+  - en-US-ChristopherNeural

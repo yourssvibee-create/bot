@@ -22,9 +22,9 @@ class OpenRouterProvider(Provider):
     def model_for(self, role: str) -> str:
         if role == "draft":
             return get("OPENROUTER_MODEL_DRAFT",
-                      "meta-llama/llama-3.3-70b-instruct:free")  # type: ignore[return-value]
+                      "anthropic/claude-haiku-5.5")  # type: ignore[return-value]
         return get("OPENROUTER_MODEL_SCORE",
-                  "meta-llama/llama-3.1-8b-instruct:free")  # type: ignore[return-value]
+                  "anthropic/claude-haiku-5.5")  # type: ignore[return-value]
 
     def _headers(self) -> dict[str, str]:
         # Optional attribution headers; not required but recommended.

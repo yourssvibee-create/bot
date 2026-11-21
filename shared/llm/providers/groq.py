@@ -21,8 +21,8 @@ class GroqProvider(Provider):
 
     def model_for(self, role: str) -> str:
         if role == "draft":
-            return get("GROQ_MODEL_DRAFT", "llama-3.3-70b-versatile")  # type: ignore[return-value]
-        return get("GROQ_MODEL_SCORE", "llama-3.1-8b-instant")  # type: ignore[return-value]
+            return get("GROQ_MODEL_DRAFT", "openai/gpt-oss-120b")  # type: ignore[return-value]
+        return get("GROQ_MODEL_SCORE", "openai/gpt-oss-20b")  # type: ignore[return-value]
 
     def _reasoning_kwargs(self, model: str) -> dict:
         # gpt-oss-* on Groq is a reasoning model — without reasoning_effort=low

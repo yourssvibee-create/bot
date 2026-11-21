@@ -19,11 +19,24 @@ from shared.config import require_bot_id
 from shared.logging import get_logger
 
 from src import content_generator as cg
+from src.media.typography import phrases_from_script, render_typography_video
 from src.video_pipeline import (VideoSegment, fetch_pixabay_clip,
                                 make_placeholder_clip, probe_duration,
                                 render_root, stitch, synthesize_tts)
 
 log = get_logger("bot2.short_form")
+
+# Script tokens that signal "real-world footage reads better than typography"
+# — mirrors prompts/providers.yaml::broll.pixabay_triggers.
+_PIXABAY_TRIGGERS = {
+    "restaurant", "cafe", "office", "store", "laptop", "phone",
+    "meeting", "team", "customer", "shop", "kitchen", "storefront",
+}
+
+
+def _needs_real_footage(script: str) -> bool:
+    low = script.lower()
+    return any(t in low for t in _PIXABAY_TRIGGERS)
 
 
 def _slugify(s: str) -> str:
@@ -67,21 +80,44 @@ async def build_short(*, dry_run: bool, slug: str | None, seed: int | None) -> P
             raise
     duration = probe_duration(audio_path) or 2.0
 
-    # 2. b-roll (Pexels or placeholder)
+    # 2. Visual path:
+    #    primary  = kinetic typography (brand-colored animated text, no API)
+    #    fallback = Pixabay B-roll when script has physical/sensory tokens
+    #    last     = solid-color placeholder if both fail or dry-run
     broll_path = out_dir / f".{slug}_broll.mp4"
-    clip = None
-    if not dry_run:
+    visual_source = "placeholder"
+    use_pixabay = _needs_real_footage(body)
+
+    if not dry_run and use_pixabay:
         try:
             clip = await fetch_pixabay_clip(hook, broll_path)
+            if clip is not None:
+                visual_source = "pixabay"
         except Exception as e:
             log.warning("pixabay_fail", extra={"err": str(e)[:200]})
-    if clip is None:
+
+    if not dry_run and visual_source == "placeholder":
+        try:
+            phrases = phrases_from_script(body, duration)
+            render_typography_video(phrases, audio_path, broll_path,
+                                    size=(1080, 1920))
+            visual_source = "typography"
+        except Exception as e:
+            log.warning("typography_fail", extra={"err": str(e)[:200]})
+
+    if visual_source == "placeholder":
         make_placeholder_clip(broll_path, duration, width=1080, height=1920)
 
-    # 3. stitch
-    seg = VideoSegment(text=body, audio_path=audio_path, broll_path=broll_path,
-                       duration=duration)
-    stitch([seg], out_path, orientation="portrait")
+    log.info("short_form_visual", extra={"source": visual_source})
+
+    # 3. stitch — typography already includes audio, so skip the stitch step
+    #    and just use the typography mp4 directly as the final output.
+    if visual_source == "typography":
+        out_path = broll_path.rename(out_path)
+    else:
+        seg = VideoSegment(text=body, audio_path=audio_path, broll_path=broll_path,
+                           duration=duration)
+        stitch([seg], out_path, orientation="portrait")
     log.info("short_form_rendered", extra={"path": str(out_path),
                                            "duration": duration})
     return out_path
