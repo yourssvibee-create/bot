@@ -93,6 +93,7 @@ async def dispatch_item(content_row: dict[str, Any], *, dry_run: bool) -> list[D
         content_type=content_row.get("content_type", "long"),
         caption=content_row.get("caption", "") or "",
         media_urls=list(content_row.get("media_urls") or []),
+        extra={"draft_only": bool(content_row.get("draft_only", False))},
     )
     results: list[DispatchRow] = []
 
