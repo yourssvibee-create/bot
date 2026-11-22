@@ -150,6 +150,7 @@ async def _main_async() -> int:
     leads: list[dict] = []
     persisted: list[tuple[str, dict]] = []
     score_errors = 0
+    rate_limited = 0
     try:
         for sig in signals:
             try:
@@ -167,16 +168,29 @@ async def _main_async() -> int:
                 if scored:
                     leads.append(scored)
             except Exception as e:
-                score_errors += 1
-                log.warning("score_fail", extra={"err": str(e), "sig_id": sig_id})
+                msg = str(e).lower()
+                is_rl = ("rate limit" in msg or "rate_limit" in msg
+                         or "429" in msg or "providers exhausted" in msg)
+                if is_rl:
+                    rate_limited += 1
+                else:
+                    score_errors += 1
+                log.warning("score_fail",
+                            extra={"err": str(e), "sig_id": sig_id,
+                                   "rate_limited": is_rl})
                 record("score", target=sig.get("url"), channel=None,
-                       status="fail", detail={"err": str(e)})
+                       status="skip" if is_rl else "fail",
+                       detail={"err": str(e), "rate_limited": is_rl})
+            # Pace score calls to stay under Groq TPM/RPM caps.
+            await asyncio.sleep(0.6)
+        note = f"{len(persisted)} persisted, {len(leads)} new leads"
+        if rate_limited:
+            note += f", {rate_limited} rate-limited (skipped)"
         if score_errors:
             t.fail("score", RuntimeError(
-                f"{score_errors}/{len(persisted)} scores failed"))
+                f"{score_errors}/{len(persisted)} scores failed ({note})"))
         else:
-            t.ok("score",
-                 f"{len(persisted)} persisted, {len(leads)} new leads")
+            t.ok("score", note)
     except Exception as e:
         t.fail("score", e)
 

@@ -46,15 +46,27 @@ def _looks_like_question(text: str) -> bool:
 
 
 async def _stealth_goto(page, url: str, *, label: str) -> tuple[int | None, str]:
-    """Goto with jitter + retry on 403/5xx. Returns (status, html)."""
+    """Goto with jitter + retry on 403/5xx + wait for client-side hydration."""
     last_status: int | None = None
     last_html = ""
     for attempt in range(1, _RETRIES + 1):
         await asyncio.sleep(random.uniform(_JITTER_MIN, _JITTER_MAX))
         try:
             resp = await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-            last_html = await page.content()
             last_status = resp.status if resp else None
+            # Quora is client-rendered. Wait for network to settle and give
+            # React time to paint results; fall through if it never settles.
+            try:
+                await page.wait_for_load_state("networkidle", timeout=12_000)
+            except Exception:
+                pass
+            try:
+                await page.wait_for_selector("a[href^='/']", timeout=8_000)
+            except Exception:
+                pass
+            # Small extra settle after any infinite-scroll trigger.
+            await asyncio.sleep(1.5)
+            last_html = await page.content()
             log.info(f"{label}_fetched",
                      extra={"url": url, "status": last_status,
                             "bytes": len(last_html), "attempt": attempt})

@@ -16,6 +16,7 @@ import httpx
 from bs4 import BeautifulSoup
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+from shared.config import get_bool
 from shared.logging import get_logger
 
 from ..config import nitter_instances, settings
@@ -52,6 +53,13 @@ async def _fetch(client: httpx.AsyncClient, url: str) -> tuple[int, str] | None:
 async def scrape(queries: list[str] | None = None) -> list[dict[str, Any]]:
     cfg = settings()
     qs = queries or QUERIES_DEFAULT
+    # Public Nitter mirrors are effectively dead post-2023 Twitter API clamp.
+    # Keep the code path warm but gate behind BOT1_X_ENABLED so CI stops
+    # churning through 9 ConnectErrors per query until we wire a working
+    # source (official X API, syndication endpoint, or private mirror).
+    if not get_bool("BOT1_X_ENABLED", False):
+        log.info("x_disabled_source_gate")
+        return []
     instances = nitter_instances()
     log.info("x_seed_queries",
              extra={"count": len(qs), "queries": qs,
