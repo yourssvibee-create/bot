@@ -192,8 +192,13 @@ def _bot2_posts_today(platform: str) -> int:
 
 
 def _persist_dispatches(results: list[DispatchRow], *, dry_run: bool) -> None:
-    """Insert one row per DispatchRow into bot2_dispatches."""
-    if not results:
+    """Insert one row per DispatchRow into bot2_dispatches.
+
+    Skipped entirely in dry-run: the content_queue rows aren't persisted
+    either (see nightly_run), so an INSERT here would violate the
+    bot2_dispatches.content_id FK. Dry-runs stay in memory.
+    """
+    if not results or dry_run:
         return
     try:
         from shared.db import execute
@@ -209,21 +214,25 @@ def _persist_dispatches(results: list[DispatchRow], *, dry_run: bool) -> None:
             )
     except Exception as e:
         log.warning("dispatch_persist_fail",
-                    extra={"err": str(e)[:200], "n": len(results),
-                           "dry_run": dry_run})
+                    extra={"err": str(e)[:200], "n": len(results)})
 
 
 def _update_health(results: list[DispatchRow], *, dry_run: bool) -> None:
     """Upsert bot2_account_health per platform result.
 
     success -> green, last_successful_post=now, consecutive_failures=0
-    failure -> consecutive_failures += 1; yellow at >=_YELLOW_AFTER, red at >=_RED_AFTER
-    red_flag (pattern match) is handled separately by safety.on_red_flag.
+    failure -> consecutive_failures += 1 atomically; yellow at >=_YELLOW_AFTER,
+               red at >=_RED_AFTER. CASE on the incremented value runs inside
+               the upsert so multiple failures for the same platform in one
+               batch increment correctly (previously race: all rows read the
+               same pre-state and wrote the same post-state).
+    red_flag (caption pattern match) is handled separately by safety.on_red_flag.
+    Skipped entirely in dry-run so fake results can't poison live health.
     """
-    if not results:
+    if not results or dry_run:
         return
     try:
-        from shared.db import execute, fetch_one
+        from shared.db import execute
         for r in results:
             if r.status in ("posted", "skipped_dry_run"):
                 execute(
@@ -235,32 +244,34 @@ def _update_health(results: list[DispatchRow], *, dry_run: bool) -> None:
                     "consecutive_failures = 0, status = 'green'",
                     (r.platform,),
                 )
-            elif r.status in ("failed",):
-                row = fetch_one(
-                    "select consecutive_failures from bot2_account_health "
-                    "where platform = %s",
-                    (r.platform,),
-                )
-                prev = int((row or {}).get("consecutive_failures") or 0)
-                new_count = prev + 1
-                new_status = (
-                    "red" if new_count >= _RED_AFTER
-                    else "yellow" if new_count >= _YELLOW_AFTER
-                    else "green"
-                )
+            elif r.status == "failed":
+                # Atomic read-modify-write: increment on the stored value
+                # (not an in-Python snapshot), so N failures in one batch
+                # climb the counter N times — not just once.
                 execute(
                     "insert into bot2_account_health "
                     "(platform, consecutive_failures, status, notes) "
-                    "values (%s, %s, %s, %s) "
+                    "values (%s, 1, "
+                    "        case when 1 >= %s then 'red' "
+                    "             when 1 >= %s then 'yellow' "
+                    "             else 'green' end, "
+                    "        %s) "
                     "on conflict (platform) do update set "
-                    "consecutive_failures = excluded.consecutive_failures, "
-                    "status = excluded.status, notes = excluded.notes",
-                    (r.platform, new_count, new_status, (r.error or None)),
+                    "consecutive_failures = bot2_account_health.consecutive_failures + 1, "
+                    "status = case "
+                    "  when bot2_account_health.consecutive_failures + 1 >= %s then 'red' "
+                    "  when bot2_account_health.consecutive_failures + 1 >= %s then 'yellow' "
+                    "  else 'green' end, "
+                    "notes = excluded.notes",
+                    (r.platform,
+                     _RED_AFTER, _YELLOW_AFTER,
+                     (r.error or None),
+                     _RED_AFTER, _YELLOW_AFTER),
                 )
             # Other statuses (skipped_*, red_flag) don't move the counter.
     except Exception as e:
         log.warning("health_update_fail",
-                    extra={"err": str(e)[:200], "dry_run": dry_run})
+                    extra={"err": str(e)[:200]})
 
 
 async def _run_one(cls: type[BasePlatformAdapter], platform: str,
