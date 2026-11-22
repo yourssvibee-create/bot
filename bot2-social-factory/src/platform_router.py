@@ -301,8 +301,18 @@ async def _run_one(cls: type[BasePlatformAdapter], platform: str,
                            "skipped_not_implemented",
                            error="login not implemented")
     except Exception as e:
+        # Same missing-credential logic as the API-fallback path above —
+        # a Playwright-only adapter (medium, quora, nextdoor, …) that has
+        # no cached session or no credentials env isn't a failure, it's an
+        # un-provisioned platform.
+        msg = str(e)
+        if ("Missing required env var" in msg
+                or "no cached session" in msg):
+            return DispatchRow(content_id, platform, adapter.method,
+                               "skipped_not_implemented",
+                               error=msg[:300])
         return DispatchRow(content_id, platform, adapter.method,
-                           "failed", error=str(e)[:300])
+                           "failed", error=msg[:300])
 
     try:
         res: PostResult = await adapter.post(payload)
