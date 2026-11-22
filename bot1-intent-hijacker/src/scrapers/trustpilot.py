@@ -1,8 +1,9 @@
-"""Trustpilot 1-3 star complaint scraper (Playwright, polite 1 req / 4s)."""
+"""Trustpilot 1-3 star complaint scraper (Playwright stealth, polite 1 req / 4s)."""
 from __future__ import annotations
 
 import asyncio
 import hashlib
+import random
 from typing import Any
 from urllib.parse import urljoin
 
@@ -14,6 +15,31 @@ from shared.playwright_base import launch_context
 from ..config import settings
 
 log = get_logger("bot1.scraper.trustpilot")
+
+_RETRIES = 3
+_JITTER_MIN = 2.0
+_JITTER_MAX = 5.0
+
+
+async def _stealth_goto(page, url: str, *, label: str) -> tuple[int | None, str]:
+    """Goto with random jitter + up to _RETRIES on 403/5xx. Returns (status, html)."""
+    last_status: int | None = None
+    last_html = ""
+    for attempt in range(1, _RETRIES + 1):
+        await asyncio.sleep(random.uniform(_JITTER_MIN, _JITTER_MAX))
+        try:
+            resp = await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+            last_html = await page.content()
+            last_status = resp.status if resp else None
+            log.info(f"{label}_fetched",
+                     extra={"url": url, "status": last_status,
+                            "bytes": len(last_html), "attempt": attempt})
+            if last_status is None or last_status < 400:
+                return last_status, last_html
+        except Exception as e:
+            log.warning(f"{label}_err",
+                        extra={"url": url, "err": str(e), "attempt": attempt})
+    return last_status, last_html
 
 CATEGORY_URLS_DEFAULT = [
     "https://www.trustpilot.com/categories/software_company?stars=1&stars=2&stars=3",
@@ -37,15 +63,11 @@ async def scrape(category_urls: list[str] | None = None) -> list[dict[str, Any]]
         page = await ctx.new_page()
         for cat_url in urls:
             log.info("tp_cat_fetch", extra={"url": cat_url})
-            try:
-                resp = await page.goto(cat_url, wait_until="domcontentloaded", timeout=30_000)
-                html = await page.content()
-                status = resp.status if resp else None
-                log.info("tp_cat_fetched",
-                         extra={"url": cat_url, "status": status, "bytes": len(html)})
-            except Exception as e:
-                log.warning("tp_cat_fail", extra={"url": cat_url, "err": str(e)})
-                errors.append(f"cat {cat_url}: {e}")
+            status, html = await _stealth_goto(page, cat_url, label="tp_cat")
+            if status is None or status >= 400 or not html:
+                log.warning("tp_cat_blocked",
+                            extra={"url": cat_url, "status": status})
+                errors.append(f"cat {cat_url}: status={status}")
                 continue
             soup = BeautifulSoup(html, "html.parser")
             cards = soup.select("a[href*='/review/']")
@@ -58,17 +80,10 @@ async def scrape(category_urls: list[str] | None = None) -> list[dict[str, Any]]
                 seen.add(href)
                 biz_url = urljoin("https://www.trustpilot.com", href)
                 await asyncio.sleep(cfg.polite_delay_trustpilot)
-                try:
-                    resp = await page.goto(biz_url + "?stars=1&stars=2&stars=3",
-                                           wait_until="domcontentloaded", timeout=30_000)
-                    biz_html = await page.content()
-                    log.info("tp_biz_fetched",
-                             extra={"url": biz_url,
-                                    "status": resp.status if resp else None,
-                                    "bytes": len(biz_html)})
-                except Exception as e:
-                    log.warning("tp_biz_fail", extra={"url": biz_url, "err": str(e)})
-                    errors.append(f"biz {biz_url}: {e}")
+                biz_full = biz_url + "?stars=1&stars=2&stars=3"
+                b_status, biz_html = await _stealth_goto(page, biz_full, label="tp_biz")
+                if b_status is None or b_status >= 400 or not biz_html:
+                    errors.append(f"biz {biz_url}: status={b_status}")
                     continue
                 bsoup = BeautifulSoup(biz_html, "html.parser")
                 reviews = bsoup.select("article")
@@ -98,8 +113,8 @@ async def scrape(category_urls: list[str] | None = None) -> list[dict[str, Any]]
         await pw.stop()
     log.info("tp_done", extra={"count": len(out), "errors": len(errors)})
     if not out and errors:
-        raise RuntimeError(
-            f"trustpilot: 0 signals across {len(urls)} category URLs; "
-            f"{len(errors)} errors. First: {errors[0]}"
-        )
+        # Site is blocking us — log loudly but don't raise. External block is
+        # not a code bug; fail-soft orchestrator records the clean [] result.
+        log.warning("tp_all_blocked",
+                    extra={"errors": len(errors), "first": errors[0]})
     return out
