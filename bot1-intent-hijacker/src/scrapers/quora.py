@@ -45,6 +45,17 @@ def _looks_like_question(text: str) -> bool:
     return bool(_Q_OPENER.match(t))
 
 
+# Quora question slugs are CamelCase-or-Kebab paths of at least two tokens.
+# Examples: /How-can-I-improve-reviews, /What-is-the-best-CRM-for-small-business
+_Q_URL_RE = re.compile(r"/[A-Z][A-Za-z0-9]+(?:-[A-Za-z0-9]+){2,}")
+
+
+def _slug_to_title(href: str) -> str:
+    """Convert a Quora URL slug like /How-can-I-X into 'How can I X'."""
+    slug = href.lstrip("/").split("/")[0]
+    return slug.replace("-", " ").strip()
+
+
 async def _stealth_goto(page, url: str, *, label: str) -> tuple[int | None, str]:
     """Goto with jitter + retry on 403/5xx + wait for client-side hydration."""
     last_status: int | None = None
@@ -111,6 +122,8 @@ async def scrape(queries: list[str] | None = None) -> list[dict[str, Any]]:
             # Loosened: any internal anchor whose text looks like a question
             # and whose href is a slug (contains '-') and isn't a known
             # non-question prefix. Markup churns, but this heuristic survives.
+            # Pass 1: anchor-based. Modern Quora often nests the question
+            # text in a child <span>, so also check aria-label / title attrs.
             for a in soup.select("a[href^='/']"):
                 href = (a.get("href") or "").split("?")[0]
                 if not href or href in seen_hrefs or "-" not in href:
@@ -119,7 +132,13 @@ async def scrape(queries: list[str] | None = None) -> list[dict[str, Any]]:
                     continue
                 text = a.get_text(" ", strip=True)
                 if not _looks_like_question(text):
-                    continue
+                    # Try fallbacks: aria-label, title, or a slug-derived
+                    # synthetic title from the href itself.
+                    text = (a.get("aria-label") or a.get("title") or "").strip()
+                    if not _looks_like_question(text):
+                        text = _slug_to_title(href)
+                        if not _looks_like_question(text):
+                            continue
                 seen_hrefs.add(href)
                 qurl = f"https://www.quora.com{href}"
                 out.append({
@@ -133,6 +152,34 @@ async def scrape(queries: list[str] | None = None) -> list[dict[str, Any]]:
                 })
                 if len(out) >= cfg.max_signals_per_source:
                     return out
+
+            # Pass 2: regex fallback on raw HTML for any CamelCase or
+            # hyphenated path that looks like a Quora question URL.
+            # Only runs when pass 1 found nothing for this query.
+            if len(out) == before:
+                for m in _Q_URL_RE.finditer(html):
+                    href = m.group(0)
+                    if href in seen_hrefs:
+                        continue
+                    if any(href.startswith(p) for p in _SKIP_PREFIXES):
+                        continue
+                    title = _slug_to_title(href)
+                    if not _looks_like_question(title):
+                        continue
+                    seen_hrefs.add(href)
+                    qurl = f"https://www.quora.com{href}"
+                    out.append({
+                        "source": "quora",
+                        "source_id": _sid(qurl),
+                        "url": qurl,
+                        "author": None,
+                        "title": title[:300],
+                        "body": None,
+                        "raw": {"query": q, "pass": "regex"},
+                    })
+                    if len(out) >= cfg.max_signals_per_source:
+                        return out
+
             log.info("quora_search_parsed",
                      extra={"q": q, "new_items": len(out) - before})
     finally:

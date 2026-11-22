@@ -58,6 +58,11 @@ jobs:
       # Flip to "false" after the first clean end-to-end CI run verifies
       # the fail-soft orchestrator + all phase wiring.
       BOT2_DRY_RUN:              "true"
+      # true = CI skips the Telegram approval gate and dispatches every item;
+      # false = orchestrator waits up to BOT2_APPROVAL_WAIT_SEC for the human
+      # to send /bot2_approve_today.
+      BOT2_AUTO_APPROVE:         "true"
+      BOT2_APPROVAL_WAIT_SEC:    "600"
       LOG_LEVEL:                 INFO
     steps:
       - uses: actions/checkout@v4
@@ -85,6 +90,11 @@ jobs:
 
       - name: Install playwright chromium
         run: poetry run playwright install --with-deps chromium
+
+      - name: Apply DB migrations
+        run: poetry run python -m scripts.apply_migrations
+        env:
+          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/bot2-social-factory
 
       - name: Run nightly orchestrator (live)
         run: poetry run python -m workers.nightly_run

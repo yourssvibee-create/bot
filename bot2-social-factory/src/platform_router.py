@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
 
+from shared import caps as shared_caps
 from shared.config import get, require_bot_id
 from shared.logging import get_logger
 
@@ -17,6 +19,10 @@ from .base_adapter import BasePlatformAdapter, PostContent, PostResult
 from . import safety
 
 log = get_logger("bot2.router")
+
+# How many consecutive per-platform failures flip account_health to yellow.
+_YELLOW_AFTER = 2
+_RED_AFTER = 5
 
 
 # Registry maps a platform slug to (adapter_class, method). Platforms whose
@@ -90,13 +96,24 @@ async def dispatch_item(content_row: dict[str, Any], *, dry_run: bool) -> list[D
     """Dispatch one bot2_content_queue row to each of its target_platforms."""
     reg = _registry()
     content_id = str(content_row.get("id", ""))
+    caption = content_row.get("caption", "") or ""
     payload = PostContent(
         content_type=content_row.get("content_type", "long"),
-        caption=content_row.get("caption", "") or "",
+        caption=caption,
         media_urls=list(content_row.get("media_urls") or []),
         extra={"draft_only": bool(content_row.get("draft_only", False))},
     )
     results: list[DispatchRow] = []
+
+    # --- Safety pre-flight: caption red-flag + shared caps + per-platform cap
+    now_local = datetime.now()
+    if safety.is_red_flag(caption):
+        for p in content_row.get("target_platforms") or []:
+            results.append(DispatchRow(
+                content_id, p, "n/a", "red_flag",
+                error="caption matched red_flag pattern pre-send",
+            ))
+        return results
 
     api_targets: list[str] = []
     pw_targets: list[str] = []
@@ -104,6 +121,23 @@ async def dispatch_item(content_row: dict[str, Any], *, dry_run: bool) -> list[D
         if p not in reg:
             results.append(DispatchRow(content_id, p, "unknown", "failed",
                                        error=f"no adapter registered for {p}"))
+            continue
+        # Per-platform cap (safety.py, first-7-day caps + windows)
+        posts_today = _bot2_posts_today(p)
+        ok, reason = safety.allowed(p, posts_today, now_local)
+        if not ok:
+            results.append(DispatchRow(
+                content_id, p, reg[p].method, "skipped_cap",
+                error=f"safety.allowed denied: {reason}",
+            ))
+            continue
+        # Cross-bot shared caps (reddit / quora / x)
+        sok, sreason = shared_caps.allowed(p)
+        if not sok:
+            results.append(DispatchRow(
+                content_id, p, reg[p].method, "skipped_shared_cap",
+                error=f"shared_caps denied: {sreason}",
+            ))
             continue
         if reg[p].method == "api":
             api_targets.append(p)
@@ -121,7 +155,103 @@ async def dispatch_item(content_row: dict[str, Any], *, dry_run: bool) -> list[D
     for p in pw_targets:
         results.append(await _run_one(reg[p], p, payload, dry_run, content_id))
 
+    # --- Persist dispatches + update account_health. DB errors are logged but
+    # don't bubble up; the orchestrator's return value still reflects truth.
+    _persist_dispatches(results, dry_run=dry_run)
+    _update_health(results, dry_run=dry_run)
     return results
+
+
+def _bot2_posts_today(platform: str) -> int:
+    """Count successful Bot 2 posts to `platform` today (UTC) for safety.allowed."""
+    try:
+        from shared.db import fetch_one
+        start = datetime.now(timezone.utc).replace(
+            hour=0, minute=0, second=0, microsecond=0,
+        )
+        row = fetch_one(
+            "select count(*)::int as n from bot2_dispatches "
+            "where platform = %s and posted_at >= %s "
+            "and status in ('posted','skipped_dry_run')",
+            (platform, start),
+        )
+        return int((row or {}).get("n") or 0)
+    except Exception as e:
+        log.warning("posts_today_query_fail",
+                    extra={"platform": platform, "err": str(e)[:200]})
+        return 0
+
+
+def _persist_dispatches(results: list[DispatchRow], *, dry_run: bool) -> None:
+    """Insert one row per DispatchRow into bot2_dispatches."""
+    if not results:
+        return
+    try:
+        from shared.db import execute
+        for r in results:
+            if not r.content_id:
+                continue
+            execute(
+                "insert into bot2_dispatches "
+                "(content_id, platform, method, posted_at, external_url, status, error) "
+                "values (%s, %s, %s, now(), %s, %s, %s)",
+                (r.content_id, r.platform, r.method or "unknown",
+                 r.external_url, r.status, (r.error or None)),
+            )
+    except Exception as e:
+        log.warning("dispatch_persist_fail",
+                    extra={"err": str(e)[:200], "n": len(results),
+                           "dry_run": dry_run})
+
+
+def _update_health(results: list[DispatchRow], *, dry_run: bool) -> None:
+    """Upsert bot2_account_health per platform result.
+
+    success -> green, last_successful_post=now, consecutive_failures=0
+    failure -> consecutive_failures += 1; yellow at >=_YELLOW_AFTER, red at >=_RED_AFTER
+    red_flag (pattern match) is handled separately by safety.on_red_flag.
+    """
+    if not results:
+        return
+    try:
+        from shared.db import execute, fetch_one
+        for r in results:
+            if r.status in ("posted", "skipped_dry_run"):
+                execute(
+                    "insert into bot2_account_health "
+                    "(platform, last_successful_post, consecutive_failures, status) "
+                    "values (%s, now(), 0, 'green') "
+                    "on conflict (platform) do update set "
+                    "last_successful_post = excluded.last_successful_post, "
+                    "consecutive_failures = 0, status = 'green'",
+                    (r.platform,),
+                )
+            elif r.status in ("failed",):
+                row = fetch_one(
+                    "select consecutive_failures from bot2_account_health "
+                    "where platform = %s",
+                    (r.platform,),
+                )
+                prev = int((row or {}).get("consecutive_failures") or 0)
+                new_count = prev + 1
+                new_status = (
+                    "red" if new_count >= _RED_AFTER
+                    else "yellow" if new_count >= _YELLOW_AFTER
+                    else "green"
+                )
+                execute(
+                    "insert into bot2_account_health "
+                    "(platform, consecutive_failures, status, notes) "
+                    "values (%s, %s, %s, %s) "
+                    "on conflict (platform) do update set "
+                    "consecutive_failures = excluded.consecutive_failures, "
+                    "status = excluded.status, notes = excluded.notes",
+                    (r.platform, new_count, new_status, (r.error or None)),
+                )
+            # Other statuses (skipped_*, red_flag) don't move the counter.
+    except Exception as e:
+        log.warning("health_update_fail",
+                    extra={"err": str(e)[:200], "dry_run": dry_run})
 
 
 async def _run_one(cls: type[BasePlatformAdapter], platform: str,
