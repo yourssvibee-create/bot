@@ -83,6 +83,15 @@ def load_env(start: Optional[Path] = None, *, override: bool = False) -> Optiona
     if _LOADED and not override:
         return _LOADED_FROM
 
+    # CI mode: when the host has already injected critical env vars
+    # (GitHub Actions `env:` block, container secrets), skip the .env file
+    # requirement and use os.environ directly. The isolation rule still
+    # holds in local dev where these aren't preset.
+    if any(os.environ.get(k) for k in ("GROQ_API_KEY", "DATABASE_URL")):
+        _LOADED = True
+        _LOADED_FROM = None
+        return None
+
     start_path = (start or Path.cwd()).resolve()
 
     # 1. Repo-root safety check — refuse if a stray .env sits at the root.

@@ -28,7 +28,7 @@ jobs:
       REDDIT_CLIENT_ID:     TODO_karma_gate
       REDDIT_CLIENT_SECRET: TODO_karma_gate
       NITTER_INSTANCES:    "https://nitter.net,https://nitter.privacydev.net,https://nitter.poast.org"
-      BOT1_DRY_RUN:        "false"
+      BOT1_DRY_RUN:        "true"
       LOG_LEVEL:           INFO
     steps:
       - uses: actions/checkout@v4
