@@ -155,6 +155,15 @@ async def dispatch_item(content_row: dict[str, Any], *, dry_run: bool) -> list[D
     for p in pw_targets:
         results.append(await _run_one(reg[p], p, payload, dry_run, content_id))
 
+    # --- Per-result visibility log so CI output shows what happened
+    # without a DB roundtrip.
+    for r in results:
+        log.info("dispatch_result",
+                 extra={"content_id": r.content_id, "platform": r.platform,
+                        "method": r.method, "status": r.status,
+                        "external_url": r.external_url,
+                        "error": (r.error or "")[:200]})
+
     # --- Persist dispatches + update account_health. DB errors are logged but
     # don't bubble up; the orchestrator's return value still reflects truth.
     _persist_dispatches(results, dry_run=dry_run)
