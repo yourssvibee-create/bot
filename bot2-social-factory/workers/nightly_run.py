@@ -331,8 +331,11 @@ async def nightly(*, dry_run: bool, seed: int | None) -> int:
     try:
         results = await run_queue(rows, dry_run=dry_run)
         n_failed = sum(1 for r in results if r.status == "failed")
-        n_posted = sum(1 for r in results if r.status in ("posted", "skipped_dry_run"))
-        n_skipped = sum(1 for r in results if r.status.startswith("skipped"))
+        n_posted = sum(1 for r in results
+                       if r.status in ("posted", "skipped_dry_run"))
+        n_skipped = sum(1 for r in results
+                        if r.status.startswith("skipped")
+                        and r.status != "skipped_dry_run")
         n_redflag = sum(1 for r in results if r.status == "red_flag")
         note = (f"{n_posted} posted, {n_skipped} skipped, "
                 f"{n_failed} failed, {n_redflag} red_flag / {len(results)} total")

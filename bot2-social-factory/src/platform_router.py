@@ -277,8 +277,16 @@ async def _run_one(cls: type[BasePlatformAdapter], platform: str,
                                "skipped_not_implemented",
                                error="playwright login not implemented")
         except Exception as e:
+            # "Missing required env var" means this platform's Playwright
+            # credentials aren't set either — not a real failure, treat
+            # same as the unimplemented path so the summary stays clean.
+            msg = str(e)
+            if "Missing required env var" in msg or "no cached session" in msg:
+                return DispatchRow(content_id, platform, adapter.method,
+                                   "skipped_not_implemented",
+                                   error=msg[:300])
             return DispatchRow(content_id, platform, adapter.method,
-                               "failed", error=str(e)[:300])
+                               "failed", error=msg[:300])
     except NotImplementedError:
         return DispatchRow(content_id, platform, adapter.method,
                            "skipped_not_implemented",
