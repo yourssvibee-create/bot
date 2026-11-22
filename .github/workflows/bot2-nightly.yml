@@ -56,9 +56,9 @@ jobs:
       HUGGINGFACE_API_TOKEN:     ${{ secrets.BOT2_HUGGINGFACE_API_TOKEN }}
       PIXABAY_API_KEY:           ${{ secrets.BOT2_PIXABAY_API_KEY }}
       LLM_PROVIDER_ORDER:        "groq,gemini,nvidia,openrouter"
-      # Flip to "false" after the first clean end-to-end CI run verifies
-      # the fail-soft orchestrator + all phase wiring.
-      BOT2_DRY_RUN:              "true"
+      # LIVE. Adapters without credentials still skip cleanly; fail-soft
+      # orchestrator keeps the run green on per-platform failures.
+      BOT2_DRY_RUN:              "false"
       # true = CI skips the Telegram approval gate and dispatches every item;
       # false = orchestrator waits up to BOT2_APPROVAL_WAIT_SEC for the human
       # to send /bot2_approve_today.
