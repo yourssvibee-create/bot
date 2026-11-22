@@ -28,6 +28,7 @@ jobs:
       GEMINI_API_KEY:            ${{ secrets.BOT2_GEMINI_API_KEY }}
       NVIDIA_API_KEY:            ${{ secrets.BOT2_NVIDIA_API_KEY }}
       OPENROUTER_API_KEY:        ${{ secrets.BOT2_OPENROUTER_API_KEY }}
+      DATABASE_URL:              ${{ secrets.DATABASE_URL }}
       SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
       SUPABASE_ANON_KEY:         ${{ secrets.SUPABASE_ANON_KEY }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
