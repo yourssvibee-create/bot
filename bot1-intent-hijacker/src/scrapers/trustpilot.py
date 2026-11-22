@@ -29,19 +29,27 @@ def _sid(url: str) -> str:
 async def scrape(category_urls: list[str] | None = None) -> list[dict[str, Any]]:
     cfg = settings()
     urls = category_urls or CATEGORY_URLS_DEFAULT
+    log.info("tp_seed_urls", extra={"count": len(urls), "urls": urls})
     out: list[dict[str, Any]] = []
+    errors: list[str] = []
     ctx, pw = await launch_context("bot1", "trustpilot", headless=cfg.playwright_headless)
     try:
         page = await ctx.new_page()
         for cat_url in urls:
+            log.info("tp_cat_fetch", extra={"url": cat_url})
             try:
-                await page.goto(cat_url, wait_until="domcontentloaded", timeout=30_000)
+                resp = await page.goto(cat_url, wait_until="domcontentloaded", timeout=30_000)
                 html = await page.content()
+                status = resp.status if resp else None
+                log.info("tp_cat_fetched",
+                         extra={"url": cat_url, "status": status, "bytes": len(html)})
             except Exception as e:
                 log.warning("tp_cat_fail", extra={"url": cat_url, "err": str(e)})
+                errors.append(f"cat {cat_url}: {e}")
                 continue
             soup = BeautifulSoup(html, "html.parser")
             cards = soup.select("a[href*='/review/']")
+            log.info("tp_cat_parsed", extra={"url": cat_url, "cards": len(cards)})
             seen: set[str] = set()
             for a in cards:
                 href = a.get("href")
@@ -51,11 +59,16 @@ async def scrape(category_urls: list[str] | None = None) -> list[dict[str, Any]]
                 biz_url = urljoin("https://www.trustpilot.com", href)
                 await asyncio.sleep(cfg.polite_delay_trustpilot)
                 try:
-                    await page.goto(biz_url + "?stars=1&stars=2&stars=3",
-                                    wait_until="domcontentloaded", timeout=30_000)
+                    resp = await page.goto(biz_url + "?stars=1&stars=2&stars=3",
+                                           wait_until="domcontentloaded", timeout=30_000)
                     biz_html = await page.content()
+                    log.info("tp_biz_fetched",
+                             extra={"url": biz_url,
+                                    "status": resp.status if resp else None,
+                                    "bytes": len(biz_html)})
                 except Exception as e:
                     log.warning("tp_biz_fail", extra={"url": biz_url, "err": str(e)})
+                    errors.append(f"biz {biz_url}: {e}")
                     continue
                 bsoup = BeautifulSoup(biz_html, "html.parser")
                 reviews = bsoup.select("article")
@@ -83,5 +96,10 @@ async def scrape(category_urls: list[str] | None = None) -> list[dict[str, Any]]
     finally:
         await ctx.close()
         await pw.stop()
-    log.info("tp_done", extra={"count": len(out)})
+    log.info("tp_done", extra={"count": len(out), "errors": len(errors)})
+    if not out and errors:
+        raise RuntimeError(
+            f"trustpilot: 0 signals across {len(urls)} category URLs; "
+            f"{len(errors)} errors. First: {errors[0]}"
+        )
     return out

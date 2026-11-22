@@ -45,9 +45,15 @@ def scrape(subs: list[str] | None = None, queries: list[str] | None = None) -> l
 
     subs = subs or SUBS_DEFAULT
     qs = queries or QUERIES_DEFAULT
+    log.info("reddit_seed",
+             extra={"subs": subs, "queries": qs,
+                    "combos": len(subs) * len(qs)})
     out: list[dict[str, Any]] = []
+    errors: list[str] = []
     for sub in subs:
         for q in qs:
+            log.info("reddit_search", extra={"sub": sub, "q": q})
+            before = len(out)
             try:
                 for post in reddit.subreddit(sub).search(q, sort="new", time_filter="week", limit=10):
                     url = f"https://www.reddit.com{post.permalink}"
@@ -60,7 +66,16 @@ def scrape(subs: list[str] | None = None, queries: list[str] | None = None) -> l
                         "body": (post.selftext or "")[:2000],
                         "raw": {"sub": sub, "query": q, "score": post.score},
                     })
+                log.info("reddit_search_parsed",
+                         extra={"sub": sub, "q": q, "new_items": len(out) - before})
             except Exception as e:
-                log.warning("reddit_search_fail", extra={"sub": sub, "q": q, "err": str(e)})
-    log.info("reddit_done", extra={"count": len(out)})
+                log.warning("reddit_search_fail",
+                            extra={"sub": sub, "q": q, "err": str(e)})
+                errors.append(f"{sub}/{q!r}: {e}")
+    log.info("reddit_done", extra={"count": len(out), "errors": len(errors)})
+    if not out and errors:
+        raise RuntimeError(
+            f"reddit: 0 signals across {len(subs) * len(qs)} sub/query combos; "
+            f"{len(errors)} errors. First: {errors[0]}"
+        )
     return out
