@@ -17,7 +17,14 @@ jobs:
       run:
         working-directory: bot1-intent-hijacker
     env:
+      # LLM pool — router falls back in this order. Missing keys are
+      # auto-filtered (provider_disabled). Add each as a GitHub secret to
+      # activate it in the chain.
       GROQ_API_KEY:        ${{ secrets.GROQ_API_KEY }}
+      GEMINI_API_KEY:      ${{ secrets.GEMINI_API_KEY }}
+      NVIDIA_API_KEY:      ${{ secrets.NVIDIA_API_KEY }}
+      OPENROUTER_API_KEY:  ${{ secrets.OPENROUTER_API_KEY }}
+      LLM_PROVIDER_ORDER:  "groq,gemini,nvidia,openrouter"
       HUNTER_API_KEY:      ${{ secrets.HUNTER_API_KEY }}
       DATABASE_URL:        ${{ secrets.DATABASE_URL }}
       SUPABASE_URL:        ${{ secrets.SUPABASE_URL }}
