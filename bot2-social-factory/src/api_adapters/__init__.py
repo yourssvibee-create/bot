@@ -5,6 +5,7 @@ from .bluesky import BlueskyAdapter
 from .linkedin import LinkedinAPIAdapter
 from .meta import MetaAdapter
 from .pinterest import PinterestAPIAdapter
+from .producthunt import ProductHuntAdapter
 from .tiktok import TiktokAPIAdapter
 from .x import XAPIAdapter
 from .youtube import YoutubeAPIAdapter
@@ -13,20 +14,21 @@ from .youtube import YoutubeAPIAdapter
 # only one actually implemented; everything else returns from UnregisteredAPIAdapter
 # and the router falls back to Playwright.
 API_REGISTRY: dict[str, type] = {
-    "bluesky":   BlueskyAdapter,
-    "x":         XAPIAdapter,
-    "linkedin":  LinkedinAPIAdapter,
-    "pinterest": PinterestAPIAdapter,
-    "youtube":   YoutubeAPIAdapter,
-    "facebook":  MetaAdapter,
-    "instagram": MetaAdapter,
-    "threads":   MetaAdapter,
-    "tiktok":    TiktokAPIAdapter,
+    "bluesky":     BlueskyAdapter,
+    "x":           XAPIAdapter,
+    "linkedin":    LinkedinAPIAdapter,
+    "pinterest":   PinterestAPIAdapter,
+    "youtube":     YoutubeAPIAdapter,
+    "facebook":    MetaAdapter,
+    "instagram":   MetaAdapter,
+    "threads":     MetaAdapter,
+    "tiktok":      TiktokAPIAdapter,
+    "producthunt": ProductHuntAdapter,
 }
 
 __all__ = [
     "APINotRegisteredError", "UnregisteredAPIAdapter",
     "BlueskyAdapter", "LinkedinAPIAdapter", "MetaAdapter",
-    "PinterestAPIAdapter", "TiktokAPIAdapter", "XAPIAdapter",
-    "YoutubeAPIAdapter", "API_REGISTRY",
+    "PinterestAPIAdapter", "ProductHuntAdapter", "TiktokAPIAdapter",
+    "XAPIAdapter", "YoutubeAPIAdapter", "API_REGISTRY",
 ]

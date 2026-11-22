@@ -65,7 +65,8 @@ def _registry() -> dict[str, type[BasePlatformAdapter]]:
     through _resolve_adapter for the PREFER_API fallback."""
     platforms = (
         "bluesky", "facebook", "instagram", "linkedin", "medium", "nextdoor",
-        "pinterest", "quora", "threads", "tiktok", "x", "youtube",
+        "pinterest", "producthunt", "quora", "threads", "tiktok", "x",
+        "youtube",
     )
     out: dict[str, type[BasePlatformAdapter]] = {}
     for p in platforms:
