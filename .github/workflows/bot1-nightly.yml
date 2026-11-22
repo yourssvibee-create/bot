@@ -27,7 +27,7 @@ jobs:
       # TODO: add REDDIT_* secrets once dave_fieldston clears karma gate.
       REDDIT_CLIENT_ID:     TODO_karma_gate
       REDDIT_CLIENT_SECRET: TODO_karma_gate
-      NITTER_INSTANCES:    "https://nitter.net,https://nitter.privacydev.net,https://nitter.poast.org"
+      NITTER_INSTANCES:    "https://nitter.privacydev.net,https://nitter.poast.org,https://nitter.net,https://nitter.1d4.us,https://nitter.kavin.rocks,https://nitter.unixfox.eu,https://nitter.fdn.fr,https://nitter.cz,https://xcancel.com"
       BOT1_DRY_RUN:        "true"
       LOG_LEVEL:           INFO
     steps:

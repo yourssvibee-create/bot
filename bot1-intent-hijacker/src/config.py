@@ -44,9 +44,23 @@ def reddit_enabled() -> bool:
     return not (is_placeholder(cid) or is_placeholder(sec))
 
 
+_NITTER_FALLBACK = [
+    "https://nitter.privacydev.net",
+    "https://nitter.poast.org",
+    "https://nitter.net",
+    "https://nitter.1d4.us",
+    "https://nitter.kavin.rocks",
+    "https://nitter.unixfox.eu",
+    "https://nitter.fdn.fr",
+    "https://nitter.cz",
+    "https://xcancel.com",
+]
+
+
 def nitter_instances() -> list[str]:
     raw = get("NITTER_INSTANCES", "") or ""
-    return [u.strip() for u in raw.split(",") if u.strip()]
+    instances = [u.strip() for u in raw.split(",") if u.strip()]
+    return instances or list(_NITTER_FALLBACK)
 
 
 __all__ = [
