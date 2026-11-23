@@ -27,9 +27,19 @@ def load_verticals() -> list[Vertical]:
     ]
 
 
-def load_pricing() -> dict[int, int]:
+def load_pricing() -> dict:
+    """Return full pricing table:
+      { "tiers": {1: {one_time, monthly, metro_bundle}, ...},
+        "everything_bundle": int }
+    """
     data = yaml.safe_load((CONFIG_DIR / "pricing.yaml").read_text(encoding="utf-8"))
-    return {int(k): int(v) for k, v in data["tiers"].items()}
+    tiers = {int(k): dict(v) for k, v in data["tiers"].items()}
+    return {"tiers": tiers, "everything_bundle": int(data.get("everything_bundle", 0))}
+
+
+def price_for(tier: int, kind: str = "one_time") -> int:
+    """Lookup USD price for (tier, kind). kind in {one_time, monthly, metro_bundle}."""
+    return int(load_pricing()["tiers"][int(tier)][kind])
 
 
 def build_matrix(

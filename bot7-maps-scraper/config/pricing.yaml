@@ -1,5 +1,10 @@
-# Per-pack pricing by metro tier.
+# Pricing by metro tier.
+# one_time    -> Gumroad / Payhip pack price
+# monthly     -> Whop monthly-refresh subscription
+# metro_bundle -> all 6 verticals in a metro, one-time
 tiers:
-  1: 19
-  2: 14
-  3: 9
+  1: { one_time: 19, monthly: 29, metro_bundle: 69 }
+  2: { one_time: 14, monthly: 19, metro_bundle: 49 }
+  3: { one_time:  9, monthly: 12, metro_bundle: 29 }
+
+everything_bundle: 499

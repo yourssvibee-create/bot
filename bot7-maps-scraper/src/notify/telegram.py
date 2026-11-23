@@ -26,6 +26,7 @@ def send_digest(
     duration_s: int,
     failures: Iterable[tuple[str, str]],
     dry_run: bool,
+    channel_counts: dict | None = None,
 ) -> None:
     fails = list(failures)
     tag = " [DRY]" if dry_run else ""
@@ -36,6 +37,9 @@ def send_digest(
         f"emails:   <b>{emails_found}</b>",
         f"duration: {duration_s}s",
     ]
+    if channel_counts:
+        bits = [f"{k}=<b>{v}</b>" for k, v in channel_counts.items()]
+        lines.append("channels: " + "  ".join(bits))
     if fails:
         lines.append("")
         lines.append(f"<b>failures ({len(fails)}):</b>")

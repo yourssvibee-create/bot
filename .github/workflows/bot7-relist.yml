@@ -1,0 +1,76 @@
+name: bot7-relist
+
+on:
+  # Run after every successful nightly to push fresh CSVs to every channel.
+  workflow_run:
+    workflows: ["bot7-nightly"]
+    types: [completed]
+  workflow_dispatch:
+
+concurrency:
+  group: bot7-relist
+  cancel-in-progress: false
+
+jobs:
+  relist:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        working-directory: bot7-maps-scraper
+    env:
+      DATABASE_URL:              ${{ secrets.BOT7_DATABASE_URL }}
+      SUPABASE_URL:              ${{ secrets.BOT7_SUPABASE_URL }}
+      SUPABASE_ANON_KEY:         ${{ secrets.BOT7_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.BOT7_SUPABASE_SERVICE_ROLE_KEY }}
+      HUNTER_API_KEY:            ${{ secrets.BOT7_HUNTER_API_KEY }}
+      TELEGRAM_BOT_TOKEN:        ${{ secrets.BOT7_TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID:          ${{ secrets.BOT7_TELEGRAM_CHAT_ID }}
+      BOT7_GUMROAD_ACCESS_TOKEN: ${{ secrets.BOT7_GUMROAD_ACCESS_TOKEN }}
+      BOT7_PAYHIP_API_KEY:       ${{ secrets.BOT7_PAYHIP_API_KEY }}
+      BOT7_WHOP_API_KEY:         ${{ secrets.BOT7_WHOP_API_KEY }}
+      BOT_ID:                    bot7
+      BOT7_DRY_RUN:              "false"
+      LOG_LEVEL:                 INFO
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download nightly CSV artifacts
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ github.event.workflow_run.id || github.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pattern: bot7-packs-*
+          merge-multiple: true
+          path: bot7-maps-scraper/output
+        continue-on-error: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install poetry
+        run: pipx install poetry==2.5.1
+
+      - name: Install deps
+        run: poetry install --no-interaction --no-ansi
+
+      - name: Seed .env for shared.config isolation
+        run: |
+          echo "BOT_ID=bot7" > .env
+          echo "DATABASE_URL=${DATABASE_URL}" >> .env
+          echo "SUPABASE_URL=${SUPABASE_URL}" >> .env
+          echo "SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}" >> .env
+          echo "SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}" >> .env
+          echo "HUNTER_API_KEY=${HUNTER_API_KEY}" >> .env
+          echo "TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}" >> .env
+          echo "TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}" >> .env
+          echo "BOT7_GUMROAD_ACCESS_TOKEN=${BOT7_GUMROAD_ACCESS_TOKEN}" >> .env
+          echo "BOT7_PAYHIP_API_KEY=${BOT7_PAYHIP_API_KEY}" >> .env
+          echo "BOT7_WHOP_API_KEY=${BOT7_WHOP_API_KEY}" >> .env
+          echo "BOT7_DRY_RUN=${BOT7_DRY_RUN}" >> .env
+
+      - name: Relist all packs
+        run: poetry run python -m workers.relist

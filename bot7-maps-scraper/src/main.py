@@ -22,6 +22,7 @@ from shared.logging import configure, get_logger
 
 from .config import settings
 from .enrich.hunter import enrich_batch
+from .listing.publish import PackSpec, list_to_channels, populate_packs
 from .notify.telegram import send_digest
 from .output.csv_writer import write_segment_csv
 from .scrapers.google_maps import scrape_segment
@@ -60,6 +61,7 @@ class SegmentResult:
     records: int
     emails: int
     csv_path: Optional[Path]
+    rows: list                      # list[Business], kept for the listing phase
     error: Optional[str]
 
 
@@ -68,10 +70,10 @@ async def _run_segment(seg: Segment) -> SegmentResult:
         rows = await scrape_segment(seg, cap=settings.scrape_cap_per_segment)
     except Exception as e:
         traceback.print_exc()
-        return SegmentResult(seg, 0, 0, None, f"scrape: {e}")
+        return SegmentResult(seg, 0, 0, None, [], f"scrape: {e}")
 
     if not rows:
-        return SegmentResult(seg, 0, 0, None, "scrape: 0 records")
+        return SegmentResult(seg, 0, 0, None, [], "scrape: 0 records")
 
     try:
         rows = enrich_batch(rows, cap=settings.hunter_cap_per_segment)
@@ -83,14 +85,14 @@ async def _run_segment(seg: Segment) -> SegmentResult:
     try:
         csv_path = write_segment_csv(seg, rows)
     except Exception as e:
-        return SegmentResult(seg, len(rows), emails, None, f"csv: {e}")
+        return SegmentResult(seg, len(rows), emails, None, [], f"csv: {e}")
 
     try:
         upsert_businesses(seg, rows)
     except Exception as e:
         log.warning("bot7.db.fail seg=%s err=%s", seg.slug, e)
 
-    return SegmentResult(seg, len(rows), emails, csv_path, None)
+    return SegmentResult(seg, len(rows), emails, csv_path, rows, None)
 
 
 async def run(segments: Iterable[Segment] | None = None) -> int:
@@ -115,6 +117,22 @@ async def run(segments: Iterable[Segment] | None = None) -> int:
     failures = [(r.segment.slug, r.error or "") for r in results if r.error]
     total_records = sum(r.records for r in results)
     total_emails = sum(r.emails for r in results)
+
+    # ---- Phase 2: populate packs + push to channels ----
+    channel_counts: dict[str, int] = {}
+    try:
+        packs = [
+            PackSpec(segment=r.segment, rows=r.rows, csv_path=r.csv_path)
+            for r in ok if r.csv_path is not None
+        ]
+        ready = populate_packs(packs)
+        log.info("bot7.phase.packs ready=%s total=%s", ready, len(packs))
+        if ready:
+            channel_counts = await list_to_channels(packs)
+    except Exception as e:
+        log.warning("bot7.phase.listing.fail err=%s", e)
+        failures.append(("<listing>", str(e)[:200]))
+
     duration = int(time.time() - start)
     finished_at = datetime.now(timezone.utc)
 
@@ -141,6 +159,7 @@ async def run(segments: Iterable[Segment] | None = None) -> int:
         duration_s=duration,
         failures=failures,
         dry_run=settings.dry_run,
+        channel_counts=channel_counts or None,
     )
 
     log.info(

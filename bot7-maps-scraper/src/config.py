@@ -45,6 +45,12 @@ class Settings:
     output_dir: str
     metros_filter: str
     verticals_filter: str
+    gumroad_access_token: str
+    payhip_api_key: str
+    whop_api_key: str
+    channels_enabled: str      # csv of {gumroad,payhip,whop}; empty = all configured
+    min_records_for_ready: int
+    sample_pack_rows: int
 
 
 settings = Settings(
@@ -62,6 +68,12 @@ settings = Settings(
     output_dir=get("BOT7_OUTPUT_DIR", default="output") or "output",
     metros_filter=get("BOT7_METROS_FILTER", default="") or "",
     verticals_filter=get("BOT7_VERTICALS_FILTER", default="") or "",
+    gumroad_access_token=get("BOT7_GUMROAD_ACCESS_TOKEN", default="") or "",
+    payhip_api_key=get("BOT7_PAYHIP_API_KEY", default="") or "",
+    whop_api_key=get("BOT7_WHOP_API_KEY", default="") or "",
+    channels_enabled=get("BOT7_CHANNELS_ENABLED", default="") or "",
+    min_records_for_ready=_int(get("BOT7_MIN_RECORDS_FOR_READY"), 20),
+    sample_pack_rows=_int(get("BOT7_SAMPLE_PACK_ROWS"), 10),
 )
 
 CONFIG_DIR = Path(__file__).resolve().parents[1] / "config"
