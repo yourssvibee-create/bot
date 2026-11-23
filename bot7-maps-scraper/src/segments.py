@@ -1,0 +1,46 @@
+"""Load metros/verticals from YAML and build the 192-segment matrix."""
+from __future__ import annotations
+
+from typing import Iterable
+
+import yaml
+
+from .config import CONFIG_DIR
+from .types import Metro, Segment, Vertical
+
+
+def load_metros() -> list[Metro]:
+    data = yaml.safe_load((CONFIG_DIR / "metros.yaml").read_text(encoding="utf-8"))
+    return [Metro(**m) for m in data["metros"]]
+
+
+def load_verticals() -> list[Vertical]:
+    data = yaml.safe_load((CONFIG_DIR / "verticals.yaml").read_text(encoding="utf-8"))
+    return [
+        Vertical(
+            slug=v["slug"],
+            name=v["name"],
+            query=v["query"],
+            chain_exclusions=[s.lower() for s in v.get("chain_exclusions", [])],
+        )
+        for v in data["verticals"]
+    ]
+
+
+def load_pricing() -> dict[int, int]:
+    data = yaml.safe_load((CONFIG_DIR / "pricing.yaml").read_text(encoding="utf-8"))
+    return {int(k): int(v) for k, v in data["tiers"].items()}
+
+
+def build_matrix(
+    metros: Iterable[Metro] | None = None,
+    verticals: Iterable[Vertical] | None = None,
+) -> list[Segment]:
+    ms = list(metros) if metros is not None else load_metros()
+    vs = list(verticals) if verticals is not None else load_verticals()
+    return [Segment(metro=m, vertical=v) for m in ms for v in vs]
+
+
+def is_chain(name: str, exclusions: list[str]) -> bool:
+    n = name.lower()
+    return any(x in n for x in exclusions)

@@ -1,0 +1,136 @@
+# Top 32 US MSAs, tiered by price.
+# tier 1 = $19 pack, tier 2 = $14 pack, tier 3 = $9 pack.
+metros:
+  # ---- Tier 1 ($19) ----
+  - slug: nyc
+    name: New York
+    query_suffix: "New York, NY"
+    tier: 1
+  - slug: la
+    name: Los Angeles
+    query_suffix: "Los Angeles, CA"
+    tier: 1
+  - slug: chicago
+    name: Chicago
+    query_suffix: "Chicago, IL"
+    tier: 1
+  - slug: dfw
+    name: Dallas-Fort Worth
+    query_suffix: "Dallas, TX"
+    tier: 1
+  - slug: houston
+    name: Houston
+    query_suffix: "Houston, TX"
+    tier: 1
+  - slug: dc
+    name: Washington DC
+    query_suffix: "Washington, DC"
+    tier: 1
+  - slug: miami
+    name: Miami
+    query_suffix: "Miami, FL"
+    tier: 1
+  - slug: philly
+    name: Philadelphia
+    query_suffix: "Philadelphia, PA"
+    tier: 1
+  - slug: atlanta
+    name: Atlanta
+    query_suffix: "Atlanta, GA"
+    tier: 1
+  - slug: boston
+    name: Boston
+    query_suffix: "Boston, MA"
+    tier: 1
+  - slug: phoenix
+    name: Phoenix
+    query_suffix: "Phoenix, AZ"
+    tier: 1
+  - slug: sf
+    name: San Francisco
+    query_suffix: "San Francisco, CA"
+    tier: 1
+
+  # ---- Tier 2 ($14) ----
+  - slug: seattle
+    name: Seattle
+    query_suffix: "Seattle, WA"
+    tier: 2
+  - slug: denver
+    name: Denver
+    query_suffix: "Denver, CO"
+    tier: 2
+  - slug: san-diego
+    name: San Diego
+    query_suffix: "San Diego, CA"
+    tier: 2
+  - slug: minneapolis
+    name: Minneapolis
+    query_suffix: "Minneapolis, MN"
+    tier: 2
+  - slug: tampa
+    name: Tampa
+    query_suffix: "Tampa, FL"
+    tier: 2
+  - slug: detroit
+    name: Detroit
+    query_suffix: "Detroit, MI"
+    tier: 2
+  - slug: baltimore
+    name: Baltimore
+    query_suffix: "Baltimore, MD"
+    tier: 2
+  - slug: charlotte
+    name: Charlotte
+    query_suffix: "Charlotte, NC"
+    tier: 2
+  - slug: orlando
+    name: Orlando
+    query_suffix: "Orlando, FL"
+    tier: 2
+  - slug: san-antonio
+    name: San Antonio
+    query_suffix: "San Antonio, TX"
+    tier: 2
+  - slug: portland
+    name: Portland
+    query_suffix: "Portland, OR"
+    tier: 2
+  - slug: austin
+    name: Austin
+    query_suffix: "Austin, TX"
+    tier: 2
+
+  # ---- Tier 3 ($9) ----
+  - slug: pittsburgh
+    name: Pittsburgh
+    query_suffix: "Pittsburgh, PA"
+    tier: 3
+  - slug: cincinnati
+    name: Cincinnati
+    query_suffix: "Cincinnati, OH"
+    tier: 3
+  - slug: cleveland
+    name: Cleveland
+    query_suffix: "Cleveland, OH"
+    tier: 3
+  - slug: kansas-city
+    name: Kansas City
+    query_suffix: "Kansas City, MO"
+    tier: 3
+  - slug: columbus
+    name: Columbus
+    query_suffix: "Columbus, OH"
+    tier: 3
+  - slug: indianapolis
+    name: Indianapolis
+    query_suffix: "Indianapolis, IN"
+    tier: 3
+  - slug: nashville
+    name: Nashville
+    query_suffix: "Nashville, TN"
+    tier: 3
+  - slug: las-vegas
+    name: Las Vegas
+    query_suffix: "Las Vegas, NV"
+    tier: 3

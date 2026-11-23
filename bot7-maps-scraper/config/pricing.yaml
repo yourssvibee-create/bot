@@ -1,0 +1,5 @@
+# Per-pack pricing by metro tier.
+tiers:
+  1: 19
+  2: 14
+  3: 9

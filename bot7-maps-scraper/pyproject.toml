@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "bot7-maps-scraper"
+version = "0.1.0"
+description = "Ominvo Bot 7 — Local Business Lead Factory (Google Maps -> CSV packs)"
+authors = ["Ominvo <ops@ominvo.com>"]
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.15"
+"psycopg" = {extras = ["binary"], version = "^3.2"}
+httpx = "^0.27"
+python-dotenv = "^1.0"
+playwright = "^1.47"
+pydantic = "^2.8"
+pyyaml = "^6.0"
+tenacity = "^9.0"
+beautifulsoup4 = "^4.12"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

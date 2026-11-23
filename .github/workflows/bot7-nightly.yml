@@ -1,0 +1,92 @@
+name: bot7-nightly
+
+on:
+  schedule:
+    - cron: "0 3 * * *"      # 03:00 UTC daily (staggered from bot1@02 / bot2@15)
+  workflow_dispatch:
+    inputs:
+      metros_filter:
+        description: "Comma-separated metro slugs (blank = all)"
+        required: false
+        default: ""
+      verticals_filter:
+        description: "Comma-separated vertical slugs (blank = all)"
+        required: false
+        default: ""
+
+concurrency:
+  group: bot7-nightly
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        vertical: [restaurants, gyms, salons, dentists, chiropractors, real-estate]
+    defaults:
+      run:
+        working-directory: bot7-maps-scraper
+    env:
+      # Reuse Bot 1 Supabase project; Bot 7 tables are prefixed bot7_.
+      DATABASE_URL:              ${{ secrets.BOT7_DATABASE_URL }}
+      SUPABASE_URL:              ${{ secrets.BOT7_SUPABASE_URL }}
+      SUPABASE_ANON_KEY:         ${{ secrets.BOT7_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.BOT7_SUPABASE_SERVICE_ROLE_KEY }}
+      HUNTER_API_KEY:            ${{ secrets.BOT7_HUNTER_API_KEY }}
+      TELEGRAM_BOT_TOKEN:        ${{ secrets.BOT7_TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID:          ${{ secrets.BOT7_TELEGRAM_CHAT_ID }}
+      BOT_ID:                    bot7
+      BOT7_DRY_RUN:              "true"
+      BOT7_SCRAPE_CAP_PER_SEGMENT: "120"
+      BOT7_HUNTER_CAP_PER_SEGMENT: "40"
+      BOT7_INTER_SEGMENT_SLEEP_S:  "30"
+      # Matrix shard: this job only runs one vertical. If the operator
+      # passed a workflow_dispatch filter, let it override the shard.
+      BOT7_VERTICALS_FILTER: ${{ inputs.verticals_filter != '' && inputs.verticals_filter || matrix.vertical }}
+      BOT7_METROS_FILTER:    ${{ inputs.metros_filter }}
+      LOG_LEVEL:                 INFO
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install poetry
+        run: pipx install poetry==2.5.1
+
+      - name: Install deps
+        run: poetry install --no-interaction --no-ansi
+
+      - name: Install playwright chromium
+        run: poetry run playwright install --with-deps chromium
+
+      - name: Seed .env for shared.config isolation
+        run: |
+          echo "BOT_ID=bot7" > .env
+          echo "DATABASE_URL=${DATABASE_URL}" >> .env
+          echo "SUPABASE_URL=${SUPABASE_URL}" >> .env
+          echo "SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}" >> .env
+          echo "SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}" >> .env
+          echo "HUNTER_API_KEY=${HUNTER_API_KEY}" >> .env
+          echo "TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}" >> .env
+          echo "TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}" >> .env
+          echo "BOT7_DRY_RUN=${BOT7_DRY_RUN}" >> .env
+          echo "BOT7_VERTICALS_FILTER=${BOT7_VERTICALS_FILTER}" >> .env
+          echo "BOT7_METROS_FILTER=${BOT7_METROS_FILTER}" >> .env
+
+      - name: Run shard (${{ matrix.vertical }})
+        run: poetry run python -m workers.nightly_run
+
+      - name: Upload CSV packs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bot7-packs-${{ matrix.vertical }}
+          path: bot7-maps-scraper/output/**/*.csv
+          if-no-files-found: ignore
+          retention-days: 14

@@ -1,0 +1,99 @@
+# 6 verticals. chain_exclusions filter out franchise/chain results so the
+# output is independents only (which is what buyers pay for).
+verticals:
+  - slug: restaurants
+    name: Restaurants
+    query: "restaurants"
+    chain_exclusions:
+      - mcdonald
+      - starbucks
+      - subway
+      - chipotle
+      - taco bell
+      - burger king
+      - wendy
+      - domino
+      - pizza hut
+      - papa john
+      - kfc
+      - dunkin
+      - panera
+      - chick-fil-a
+      - olive garden
+      - applebee
+      - chili
+      - ihop
+      - denny
+      - cheesecake factory
+      - outback
+      - red lobster
+
+  - slug: gyms
+    name: Gyms & Fitness
+    query: "gyms"
+    chain_exclusions:
+      - planet fitness
+      - la fitness
+      - anytime fitness
+      - crunch fitness
+      - orangetheory
+      - f45
+      - 9round
+      - gold's gym
+      - lifetime fitness
+      - equinox
+      - 24 hour fitness
+      - snap fitness
+
+  - slug: salons
+    name: Hair Salons
+    query: "hair salons"
+    chain_exclusions:
+      - great clips
+      - supercuts
+      - sport clips
+      - fantastic sams
+      - cost cutters
+      - hair cuttery
+      - regis
+      - smartstyle
+      - jcpenney salon
+
+  - slug: dentists
+    name: Dentists
+    query: "dentists"
+    chain_exclusions:
+      - aspen dental
+      - western dental
+      - comfort dental
+      - heartland dental
+      - pacific dental
+      - dental dreams
+      - monarch dental
+      - bright now
+
+  - slug: chiropractors
+    name: Chiropractors
+    query: "chiropractors"
+    chain_exclusions:
+      - the joint chiropractic
+      - hometown chiropractic
+      - 100% chiropractic
+
+  - slug: real-estate
+    name: Real Estate Agents
+    query: "real estate agents"
+    chain_exclusions:
+      - keller williams
+      - re/max
+      - remax
+      - coldwell banker
+      - century 21
+      - compass
+      - sotheby
+      - berkshire hathaway
+      - exp realty
+      - redfin
+      - zillow
+      - realty one group
+      - weichert
