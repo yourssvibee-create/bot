@@ -75,6 +75,7 @@ class GumroadLister(ChannelLister):
                     "description": req.metadata.description,
                     "price": str(req.metadata.price_cents),
                     "customizable_price": "false",
+                    "published": "true" if settings.listing_publish else "false",
                 }
                 r = await self._post(client, "/products", data=payload)
                 body = r.json()

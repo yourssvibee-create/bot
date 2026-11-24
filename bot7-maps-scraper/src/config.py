@@ -51,6 +51,7 @@ class Settings:
     channels_enabled: str      # csv of {gumroad,payhip,whop}; empty = all configured
     min_records_for_ready: int
     sample_pack_rows: int
+    listing_publish: bool      # when false, products land as draft/hidden on all channels
 
 
 settings = Settings(
@@ -74,6 +75,7 @@ settings = Settings(
     channels_enabled=get("BOT7_CHANNELS_ENABLED", default="") or "",
     min_records_for_ready=_int(get("BOT7_MIN_RECORDS_FOR_READY"), 20),
     sample_pack_rows=_int(get("BOT7_SAMPLE_PACK_ROWS"), 10),
+    listing_publish=_bool(get("BOT7_LISTING_PUBLISH"), default=False),
 )
 
 CONFIG_DIR = Path(__file__).resolve().parents[1] / "config"

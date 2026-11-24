@@ -71,7 +71,7 @@ class WhopLister(ChannelLister):
                     json={
                         "name": req.metadata.title,
                         "description": req.metadata.description,
-                        "visibility": "visible",
+                        "visibility": "visible" if settings.listing_publish else "hidden",
                     },
                 )
                 if r.status_code >= 400:

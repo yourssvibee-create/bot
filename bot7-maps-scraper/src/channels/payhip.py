@@ -68,6 +68,7 @@ class PayhipLister(ChannelLister):
             "description": req.metadata.description,
             "price": req.metadata.price_cents / 100,
             "currency": "USD",
+            "enabled": bool(settings.listing_publish),
         }
         try:
             async with httpx.AsyncClient(timeout=30) as client:
