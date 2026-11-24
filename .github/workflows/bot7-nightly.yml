@@ -38,8 +38,12 @@ jobs:
       HUNTER_API_KEY:            ${{ secrets.BOT7_HUNTER_API_KEY }}
       TELEGRAM_BOT_TOKEN:        ${{ secrets.BOT7_TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID:          ${{ secrets.BOT7_TELEGRAM_CHAT_ID }}
+      BOT7_GUMROAD_ACCESS_TOKEN: ${{ secrets.BOT7_GUMROAD_ACCESS_TOKEN }}
+      BOT7_PAYHIP_API_KEY:       ${{ secrets.BOT7_PAYHIP_API_KEY }}
+      BOT7_WHOP_API_KEY:         ${{ secrets.BOT7_WHOP_API_KEY }}
       BOT_ID:                    bot7
-      BOT7_DRY_RUN:              "true"
+      BOT7_DRY_RUN:              "false"
+      BOT7_LISTING_PUBLISH:      "false"
       BOT7_SCRAPE_CAP_PER_SEGMENT: "120"
       BOT7_HUNTER_CAP_PER_SEGMENT: "40"
       BOT7_INTER_SEGMENT_SLEEP_S:  "30"
@@ -76,8 +80,12 @@ jobs:
           echo "TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}" >> .env
           echo "TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}" >> .env
           echo "BOT7_DRY_RUN=${BOT7_DRY_RUN}" >> .env
+          echo "BOT7_LISTING_PUBLISH=${BOT7_LISTING_PUBLISH}" >> .env
           echo "BOT7_VERTICALS_FILTER=${BOT7_VERTICALS_FILTER}" >> .env
           echo "BOT7_METROS_FILTER=${BOT7_METROS_FILTER}" >> .env
+          echo "BOT7_GUMROAD_ACCESS_TOKEN=${BOT7_GUMROAD_ACCESS_TOKEN}" >> .env
+          echo "BOT7_PAYHIP_API_KEY=${BOT7_PAYHIP_API_KEY}" >> .env
+          echo "BOT7_WHOP_API_KEY=${BOT7_WHOP_API_KEY}" >> .env
 
       - name: Run shard (${{ matrix.vertical }})
         run: poetry run python -m workers.nightly_run
