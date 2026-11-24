@@ -37,6 +37,10 @@ def send_message(text: str, *, parse_mode: str = "HTML", disable_preview: bool =
         "disable_web_page_preview": disable_preview,
     }
     r = httpx.post(_url("sendMessage"), json=payload, timeout=20)
+    if r.status_code >= 400:
+        # Surface Telegram's error description so a bad parse_mode / entity
+        # doesn't just show up as a bare HTTPStatusError upstream.
+        log.warning("telegram.send.http status=%s body=%s", r.status_code, r.text[:400])
     r.raise_for_status()
     return r.json()
 

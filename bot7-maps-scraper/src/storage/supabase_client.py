@@ -3,7 +3,7 @@ keep this unit isolated from Bot 1 / Bot 2 data."""
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 import psycopg
@@ -25,7 +25,13 @@ log = get_logger("bot7.storage")
 def _conn():
     if not settings.database_url:
         raise RuntimeError("DATABASE_URL not set for bot7")
-    return psycopg.connect(settings.database_url, autocommit=True)
+    # Supabase pgBouncer (port 6543, transaction pooling) recycles backends
+    # between statements, so psycopg3's server-side prepared-statement cache
+    # collides (`prepared statement "_pg3_0" already exists`). Disabling the
+    # prepare cache keeps us compatible with the pooler.
+    return psycopg.connect(
+        settings.database_url, autocommit=True, prepare_threshold=None
+    )
 
 
 def upsert_businesses(segment: Segment, businesses: list[Business]) -> int:

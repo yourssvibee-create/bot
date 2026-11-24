@@ -2,6 +2,7 @@
 @OminvoCommandBot (same creds as Bot 1)."""
 from __future__ import annotations
 
+import html
 from typing import Iterable
 
 import sys
@@ -44,7 +45,10 @@ def send_digest(
         lines.append("")
         lines.append(f"<b>failures ({len(fails)}):</b>")
         for seg, msg in fails[:10]:
-            lines.append(f"• <code>{seg}</code> — {msg[:120]}")
+            lines.append(
+                f"• <code>{html.escape(str(seg))}</code> — "
+                f"{html.escape(str(msg)[:120])}"
+            )
         if len(fails) > 10:
             lines.append(f"…+{len(fails) - 10} more")
     try:
