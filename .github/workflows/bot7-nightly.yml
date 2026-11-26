@@ -10,9 +10,21 @@ on:
         required: false
         default: ""
       verticals_filter:
-        description: "Comma-separated vertical slugs (blank = all)"
+        description: "Comma-separated vertical slugs (blank = all; also narrows matrix)"
         required: false
         default: ""
+      dry_run:
+        description: "BOT7_DRY_RUN — true = no Gumroad/Whop API calls, fake product ids"
+        required: false
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+      listing_publish:
+        description: "BOT7_LISTING_PUBLISH — true = published products, false = draft/hidden"
+        required: false
+        default: "false"
+        type: choice
+        options: ["false", "true"]
 
 concurrency:
   group: bot7-nightly
@@ -20,6 +32,9 @@ concurrency:
 
 jobs:
   run:
+    # Skip shards outside the operator's verticals_filter so a single-vertical
+    # smoke doesn't burn 6 runners.
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.verticals_filter == '' || contains(inputs.verticals_filter, matrix.vertical) }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     strategy:
@@ -42,8 +57,9 @@ jobs:
       BOT7_PAYHIP_API_KEY:       ${{ secrets.BOT7_PAYHIP_API_KEY }}
       BOT7_WHOP_API_KEY:         ${{ secrets.BOT7_WHOP_API_KEY }}
       BOT_ID:                    bot7
-      BOT7_DRY_RUN:              "false"
-      BOT7_LISTING_PUBLISH:      "false"
+      # workflow_dispatch inputs override; schedule-run keeps production defaults.
+      BOT7_DRY_RUN:              ${{ inputs.dry_run || 'false' }}
+      BOT7_LISTING_PUBLISH:      ${{ inputs.listing_publish || 'false' }}
       BOT7_SCRAPE_CAP_PER_SEGMENT: "120"
       BOT7_HUNTER_CAP_PER_SEGMENT: "40"
       BOT7_INTER_SEGMENT_SLEEP_S:  "30"
