@@ -32,9 +32,6 @@ concurrency:
 
 jobs:
   run:
-    # Skip shards outside the operator's verticals_filter so a single-vertical
-    # smoke doesn't burn 6 runners.
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.verticals_filter == '' || contains(inputs.verticals_filter, matrix.vertical) }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     strategy:
@@ -104,6 +101,8 @@ jobs:
           echo "BOT7_WHOP_API_KEY=${BOT7_WHOP_API_KEY}" >> .env
 
       - name: Run shard (${{ matrix.vertical }})
+        # Skip the expensive scrape step when operator narrowed verticals_filter.
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.verticals_filter == '' || contains(inputs.verticals_filter, matrix.vertical) }}
         run: poetry run python -m workers.nightly_run
 
       - name: Upload CSV packs
