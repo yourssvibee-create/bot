@@ -143,19 +143,78 @@ class GumroadLister(ChannelLister):
     async def _upload_file(
         self, client: httpx.AsyncClient, product_id: str, csv_path: Path
     ) -> str:
-        """Push CSV as the product's downloadable file. Returns "" on ok
-        or a short message otherwise — we don't fail the whole push on an
-        upload error; the listing is still live with its metadata."""
+        """Gumroad v2 file upload is a 4-step S3 presigned-multipart flow:
+          1. POST /v2/files/presign      -> upload_id, key, file_url, parts[]
+          2. PUT each part's presigned S3 URL with the chunk bytes
+          3. POST /v2/files/complete     -> finalize the multipart upload
+          4. PUT  /v2/products/{id}      -> attach via files[][url]=<file_url>
+
+        Returns "" on success or a short diagnostic. CSVs are small, so
+        the presign usually returns a single part; we still handle N
+        parts defensively.
+        """
         try:
-            with csv_path.open("rb") as f:
-                files = {"file": (csv_path.name, f, "text/csv")}
-                data = {"access_token": self.token}
-                r = await client.post(
-                    f"{_BASE}/products/{product_id}/files",
-                    data=data, files=files,
-                )
+            size = csv_path.stat().st_size
+            # 1) presign
+            r = await client.post(
+                f"{_BASE}/files/presign",
+                data={
+                    "access_token": self.token,
+                    "filename": csv_path.name,
+                    "file_size": str(size),
+                },
+            )
             if r.status_code >= 400:
-                return f"gumroad.file.push status={r.status_code}: {r.text[:200]}"
+                return f"gumroad.presign status={r.status_code}: {r.text[:200]}"
+            j = r.json()
+            upload_id = j.get("upload_id")
+            key = j.get("key")
+            file_url = j.get("file_url")
+            parts = j.get("parts") or []
+            if not (upload_id and key and file_url and parts):
+                return f"gumroad.presign: unexpected body {str(j)[:200]}"
+
+            # 2) upload each part. Part N's chunk size = size // len(parts)
+            # for the first N-1 parts, remainder on the last.
+            n = len(parts)
+            per = (size // n) if n > 0 else size
+            completed: list[dict] = []
+            with csv_path.open("rb") as f:
+                for i, p in enumerate(parts):
+                    part_number = p.get("part_number") or (i + 1)
+                    url_ = p.get("url") or ""
+                    if not url_:
+                        return f"gumroad.part {part_number}: no url in presign"
+                    chunk = f.read(per if i < n - 1 else size - per * (n - 1))
+                    pr = await client.put(url_, content=chunk)
+                    if pr.status_code >= 400:
+                        return f"gumroad.part {part_number} status={pr.status_code}: {pr.text[:200]}"
+                    etag = pr.headers.get("ETag", "").strip('"')
+                    completed.append({"part_number": part_number, "etag": etag})
+
+            # 3) complete
+            cr = await client.post(
+                f"{_BASE}/files/complete",
+                json={
+                    "access_token": self.token,
+                    "upload_id": upload_id,
+                    "key": key,
+                    "parts": completed,
+                },
+            )
+            if cr.status_code >= 400:
+                return f"gumroad.complete status={cr.status_code}: {cr.text[:200]}"
+
+            # 4) attach the finalized file_url to the product
+            ar = await client.put(
+                f"{_BASE}/products/{product_id}",
+                data={
+                    "access_token": self.token,
+                    "files[][url]": file_url,
+                },
+            )
+            if ar.status_code >= 400:
+                return f"gumroad.attach status={ar.status_code}: {ar.text[:200]}"
         except Exception as e:
             return f"gumroad.file.push: {e}"
         return ""

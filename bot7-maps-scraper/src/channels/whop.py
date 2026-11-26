@@ -1,13 +1,17 @@
 """Whop API lister — monthly-refresh subscription tier.
 
-Whop API: https://api.whop.com (v5 app API). A company / hub is created
-in the dashboard; the API manages products ("access passes"), plans, and
-the hosted file drops subscribers see. We publish:
-  POST /api/v5/app/products                     -> create access pass
-  POST /api/v5/app/products/{id}/plans          -> attach a monthly plan
-  POST /api/v5/app/products/{id}/files          -> replace the deliverable
+Whop retired API v2 on 2026-11-13. Products (access passes) are now
+created through REST v1:
+  POST /api/v1/products                         -> create product (needs
+                                                   access_pass:create +
+                                                   access_pass:basic:read
+                                                   on the App API key)
+  POST /api/v1/plans                            -> attach a monthly plan
+File delivery for the Bot 7 use case is dashboard-only (experiences +
+Files app) — we do NOT attempt an API upload here; the product exists,
+a human attaches the CSV in the Whop dashboard when flipping publish on.
 
-Bearer: BOT7_WHOP_API_KEY
+Bearer: BOT7_WHOP_API_KEY (must be an App API key, not a Bot key).
 """
 from __future__ import annotations
 
@@ -28,7 +32,9 @@ from .base import ChannelLister, ListResult, PushRequest
 
 log = get_logger("bot7.channels.whop")
 
-_BASE = "https://api.whop.com/api/v5"
+_BASE = "https://api.whop.com/api/v1"
+_API_VERSION = "2026-11-07"
+_COMPANY_ID = "biz_LEjMBcG9t5jlYX"
 
 
 class WhopLister(ChannelLister):
@@ -42,7 +48,10 @@ class WhopLister(ChannelLister):
         return bool(self.key)
 
     def _headers(self) -> dict:
-        return {"Authorization": f"Bearer {self.key}"}
+        return {
+            "Authorization": f"Bearer {self.key}",
+            "Api-Version-Date": _API_VERSION,
+        }
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1.5, min=1, max=10))
     async def _request(
@@ -65,13 +74,15 @@ class WhopLister(ChannelLister):
             return ListResult(ok=False, error="whop: no api key configured")
         try:
             async with httpx.AsyncClient(timeout=30) as client:
-                # 1) access pass
+                # 1) product — v1 shape. Only `title` is strictly required
+                # per docs; `company_id` scopes it to the right business.
+                # `visibility` is a post-create concern (Whop defaults new
+                # products to hidden until published from the dashboard).
                 r = await self._request(
-                    client, "POST", "/app/products",
+                    client, "POST", "/products",
                     json={
-                        "name": req.metadata.title,
-                        "description": req.metadata.description,
-                        "visibility": "visible" if settings.listing_publish else "hidden",
+                        "title": req.metadata.title[:80],
+                        "company_id": _COMPANY_ID,
                     },
                 )
                 if r.status_code >= 400:
@@ -84,9 +95,10 @@ class WhopLister(ChannelLister):
 
                 # 2) monthly plan — monthly refresh tier only.
                 plan_err = await self._attach_monthly_plan(client, pid, req.metadata.price_cents)
-                # 3) deliverable
-                upload_err = await self._upload_file(client, pid, req.csv_path)
-                err = "; ".join(e for e in (plan_err, upload_err) if e)
+                # 3) file delivery is dashboard-only for the Whop v1 API;
+                # product stays attachment-less until a human wires an
+                # experience + Files app in the dashboard.
+                err = plan_err
                 return ListResult(ok=True, product_id=pid, product_url=url, error=err)
         except httpx.HTTPError as e:
             return ListResult(ok=False, error=f"whop.create: {e}")
@@ -105,18 +117,17 @@ class WhopLister(ChannelLister):
             return await self.create(req)
         try:
             async with httpx.AsyncClient(timeout=30) as client:
-                await self._request(
-                    client, "PATCH", f"/app/products/{pid}",
-                    json={
-                        "name": req.metadata.title,
-                        "description": req.metadata.description,
-                    },
+                r = await self._request(
+                    client, "PATCH", f"/products/{pid}",
+                    json={"title": req.metadata.title[:80]},
                 )
-                upload_err = await self._upload_file(client, pid, req.csv_path)
+                err = ""
+                if r.status_code >= 400:
+                    err = f"whop.update {r.status_code}: {r.text[:200]}"
                 return ListResult(
                     ok=True, product_id=pid,
                     product_url=f"https://whop.com/{pid}/",
-                    error=upload_err or "",
+                    error=err,
                 )
         except httpx.HTTPError as e:
             return ListResult(ok=False, product_id=pid, error=f"whop.update: {e}")
@@ -128,7 +139,7 @@ class WhopLister(ChannelLister):
             return ListResult(ok=True, product_id=product_id)
         try:
             async with httpx.AsyncClient(timeout=30) as client:
-                r = await self._request(client, "DELETE", f"/app/products/{product_id}")
+                r = await self._request(client, "DELETE", f"/products/{product_id}")
                 if r.status_code >= 400:
                     return ListResult(ok=False, product_id=product_id, error=f"whop.delete {r.status_code}")
             return ListResult(ok=True, product_id=product_id)
@@ -138,35 +149,23 @@ class WhopLister(ChannelLister):
     async def _attach_monthly_plan(
         self, client: httpx.AsyncClient, product_id: str, price_cents: int
     ) -> str:
+        # Whop v1 renewal plan. Field names follow the v1 plans surface;
+        # a soft fail here doesn't block the product listing — a human
+        # can add the plan from the dashboard if the create rejects.
         try:
-            r = await client.post(
-                f"{_BASE}/app/products/{product_id}/plans",
-                headers=self._headers(),
+            r = await self._request(
+                client, "POST", "/plans",
                 json={
-                    "price": price_cents,
+                    "product_id": product_id,
+                    "plan_type": "renewal",
+                    "renewal_price": price_cents / 100,
+                    "initial_price": price_cents / 100,
+                    "billing_period": 30,
                     "currency": "usd",
-                    "billing_period": "month",
-                    "trial_period_days": 0,
                 },
             )
             if r.status_code >= 400:
                 return f"whop.plan status={r.status_code}: {r.text[:200]}"
         except Exception as e:
             return f"whop.plan: {e}"
-        return ""
-
-    async def _upload_file(
-        self, client: httpx.AsyncClient, product_id: str, csv_path: Path
-    ) -> str:
-        try:
-            with csv_path.open("rb") as f:
-                files = {"file": (csv_path.name, f, "text/csv")}
-                r = await client.post(
-                    f"{_BASE}/app/products/{product_id}/files",
-                    headers=self._headers(), files=files,
-                )
-            if r.status_code >= 400:
-                return f"whop.file.push status={r.status_code}: {r.text[:200]}"
-        except Exception as e:
-            return f"whop.file.push: {e}"
         return ""

@@ -52,6 +52,9 @@ class Settings:
     min_records_for_ready: int
     sample_pack_rows: int
     listing_publish: bool      # when false, products land as draft/hidden on all channels
+    scroll_max_rounds: int
+    scroll_plateau_threshold: int
+    scroll_pause_ms: int
 
 
 settings = Settings(
@@ -76,6 +79,9 @@ settings = Settings(
     min_records_for_ready=_int(get("BOT7_MIN_RECORDS_FOR_READY"), 20),
     sample_pack_rows=_int(get("BOT7_SAMPLE_PACK_ROWS"), 10),
     listing_publish=_bool(get("BOT7_LISTING_PUBLISH"), default=False),
+    scroll_max_rounds=_int(get("BOT7_SCROLL_MAX_ROUNDS"), 60),
+    scroll_plateau_threshold=_int(get("BOT7_SCROLL_PLATEAU"), 2),
+    scroll_pause_ms=_int(get("BOT7_SCROLL_PAUSE_MS"), 1500),
 )
 
 CONFIG_DIR = Path(__file__).resolve().parents[1] / "config"

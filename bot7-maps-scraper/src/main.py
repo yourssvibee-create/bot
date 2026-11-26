@@ -76,7 +76,7 @@ async def _run_segment(seg: Segment) -> SegmentResult:
         return SegmentResult(seg, 0, 0, None, [], "scrape: 0 records")
 
     try:
-        rows = enrich_batch(rows, cap=settings.hunter_cap_per_segment)
+        rows = await enrich_batch(rows, cap=settings.hunter_cap_per_segment)
     except Exception as e:
         log.warning("bot7.enrich.fail seg=%s err=%s", seg.slug, e)
 

@@ -34,8 +34,11 @@ if str(_REPO_ROOT) not in sys.path:
 from shared.logging import get_logger
 from shared.playwright_base import launch_context
 
+from ..config import settings
 from ..segments import is_chain
 from ..types import Business, Segment
+
+_SHOTS_DIR = Path.home() / ".bot_sessions" / "bot7" / "shots"
 
 log = get_logger("bot7.scrapers.gmaps")
 
@@ -76,7 +79,10 @@ async def _dismiss_consent(page) -> None:
             pass
 
 
-async def _scroll_feed(page, cap: int, *, max_rounds: int = 60) -> int:
+async def _scroll_feed(page, cap: int, *, max_rounds: int | None = None) -> int:
+    max_rounds = max_rounds if max_rounds is not None else settings.scroll_max_rounds
+    plateau_threshold = settings.scroll_plateau_threshold
+    pause_ms = settings.scroll_pause_ms
     prev = 0
     plateau = 0
     for rnd in range(max_rounds):
@@ -93,7 +99,7 @@ async def _scroll_feed(page, cap: int, *, max_rounds: int = 60) -> int:
             pass
         if count == prev:
             plateau += 1
-            if plateau >= 2:
+            if plateau >= plateau_threshold:
                 log.info("gmaps.scroll plateau n=%s rounds=%s", count, rnd)
                 return count
         else:
@@ -105,7 +111,7 @@ async def _scroll_feed(page, cap: int, *, max_rounds: int = 60) -> int:
             )
         except Exception:
             break
-        await page.wait_for_timeout(1500)
+        await page.wait_for_timeout(pause_ms)
     return await page.locator(_CARD_LINK_SELECTOR).count()
 
 
@@ -293,6 +299,25 @@ async def _micro_click_phase(page, rows: list[tuple[int, Business]]) -> int:
     return filled
 
 
+async def _dump_failure_shot(page, segment: Segment) -> None:
+    """Best-effort: write PNG + HTML snapshot to ~/.bot_sessions/bot7/shots/."""
+    try:
+        _SHOTS_DIR.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        stem = f"{segment.metro.slug}_{segment.vertical.slug}_{stamp}"
+        try:
+            await page.screenshot(path=str(_SHOTS_DIR / f"{stem}.png"), full_page=True)
+        except Exception as e:
+            log.warning("gmaps.shot.png.fail seg=%s err=%s", segment.slug, e)
+        try:
+            html = await page.content()
+            (_SHOTS_DIR / f"{stem}.html").write_text(html, encoding="utf-8")
+        except Exception as e:
+            log.warning("gmaps.shot.html.fail seg=%s err=%s", segment.slug, e)
+    except Exception as e:
+        log.warning("gmaps.shot.fail seg=%s err=%s", segment.slug, e)
+
+
 async def scrape_segment(
     segment: Segment, *, cap: int = 120, headless: bool = True
 ) -> list[Business]:
@@ -304,34 +329,40 @@ async def scrape_segment(
     ctx, pw = await launch_context(
         "bot7", f"gmaps_{segment.metro.slug}", headless=headless
     )
+    page = None
     try:
         page = await ctx.new_page()
         try:
-            await page.goto(url, wait_until="domcontentloaded", timeout=45000)
-        except Exception as e:
-            log.warning("gmaps.scrape goto_fail seg=%s err=%s", segment.slug, e)
-            return []
-        await page.wait_for_timeout(2000)
-        await _dismiss_consent(page)
+            try:
+                await page.goto(url, wait_until="domcontentloaded", timeout=45000)
+            except Exception as e:
+                log.warning("gmaps.scrape goto_fail seg=%s err=%s", segment.slug, e)
+                return []
+            await page.wait_for_timeout(2000)
+            await _dismiss_consent(page)
 
-        try:
-            await page.wait_for_selector(_FEED_SELECTOR, timeout=15000)
+            try:
+                await page.wait_for_selector(_FEED_SELECTOR, timeout=15000)
+            except Exception:
+                log.warning("gmaps.scrape no_feed seg=%s", segment.slug)
+                return []
+
+            count = await _scroll_feed(page, cap)
+            log.info("gmaps.scrape scrolled seg=%s count=%s", segment.slug, count)
+
+            html = await page.content()
+            parsed = _parse_feed(html, segment, cap)
+            log.info("gmaps.scrape parsed seg=%s kept=%s", segment.slug, len(parsed))
+
+            await _micro_click_phase(page, parsed)
+
+            rows = [b for _, b in parsed]
+            log.info("gmaps.scrape done seg=%s kept=%s", segment.slug, len(rows))
+            return rows
         except Exception:
-            log.warning("gmaps.scrape no_feed seg=%s", segment.slug)
-            return []
-
-        count = await _scroll_feed(page, cap)
-        log.info("gmaps.scrape scrolled seg=%s count=%s", segment.slug, count)
-
-        html = await page.content()
-        parsed = _parse_feed(html, segment, cap)
-        log.info("gmaps.scrape parsed seg=%s kept=%s", segment.slug, len(parsed))
-
-        await _micro_click_phase(page, parsed)
-
-        rows = [b for _, b in parsed]
-        log.info("gmaps.scrape done seg=%s kept=%s", segment.slug, len(rows))
-        return rows
+            if page is not None:
+                await _dump_failure_shot(page, segment)
+            raise
     finally:
         try:
             await ctx.close()

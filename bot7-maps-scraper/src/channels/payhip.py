@@ -1,3 +1,5 @@
+# DEFERRED — Payhip has no public product-create endpoint (coupons + license
+# keys only). Revisit in Playwright-dashboard automation phase.
 """Payhip API lister.
 
 Payhip's public API is thinner than Gumroad's — product creation is
@@ -28,7 +30,7 @@ from .base import ChannelLister, ListResult, PushRequest
 
 log = get_logger("bot7.channels.payhip")
 
-_BASE = "https://api.payhip.com/v1"
+_BASE = "https://payhip.com/api/v1"
 
 
 class PayhipLister(ChannelLister):

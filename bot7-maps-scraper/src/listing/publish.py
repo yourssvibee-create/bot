@@ -20,7 +20,6 @@ from shared.logging import get_logger
 
 from ..channels.base import ChannelLister, PushRequest
 from ..channels.gumroad import GumroadLister
-from ..channels.payhip import PayhipLister
 from ..channels.whop import WhopLister
 from ..config import settings
 from ..output.csv_writer import output_root
@@ -33,7 +32,7 @@ log = get_logger("bot7.listing.publish")
 
 # One-time packs go to Gumroad + Payhip. Monthly refresh goes to Whop.
 # This lives here (not a YAML) because it couples to the channel code.
-_ONE_TIME_CHANNELS = ("gumroad", "payhip")
+_ONE_TIME_CHANNELS = ("gumroad",)
 _MONTHLY_CHANNELS = ("whop",)
 
 
@@ -49,7 +48,6 @@ def _active_channels() -> dict[str, ChannelLister]:
     are not opt-out via BOT7_CHANNELS_ENABLED."""
     all_: dict[str, ChannelLister] = {
         "gumroad": GumroadLister(),
-        "payhip": PayhipLister(),
         "whop": WhopLister(),
     }
     allowed = {x.strip() for x in settings.channels_enabled.split(",") if x.strip()}
