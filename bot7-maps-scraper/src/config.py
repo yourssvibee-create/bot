@@ -58,6 +58,7 @@ class Settings:
     email_scrape_concurrency: int
     email_scrape_timeout_s: int
     email_scrape_max_paths: int
+    email_scrape_pattern_guess: bool
 
 
 settings = Settings(
@@ -71,7 +72,7 @@ settings = Settings(
     dry_run=_bool(get("BOT7_DRY_RUN"), default=True),
     # hunter_cap_per_segment=_int(get("BOT7_HUNTER_CAP_PER_SEGMENT"), 40),  # DEFERRED
     inter_segment_sleep_s=_int(get("BOT7_INTER_SEGMENT_SLEEP_S"), 30),
-    scrape_cap_per_segment=_int(get("BOT7_SCRAPE_CAP_PER_SEGMENT"), 120),
+    scrape_cap_per_segment=_int(get("BOT7_SCRAPE_CAP_PER_SEGMENT"), 100),
     output_dir=get("BOT7_OUTPUT_DIR", default="output") or "output",
     metros_filter=get("BOT7_METROS_FILTER", default="") or "",
     verticals_filter=get("BOT7_VERTICALS_FILTER", default="") or "",
@@ -88,6 +89,7 @@ settings = Settings(
     email_scrape_concurrency=_int(get("BOT7_EMAIL_SCRAPE_CONCURRENCY"), 8),
     email_scrape_timeout_s=_int(get("BOT7_EMAIL_SCRAPE_TIMEOUT_S"), 5),
     email_scrape_max_paths=_int(get("BOT7_EMAIL_SCRAPE_MAX_PATHS"), 2),
+    email_scrape_pattern_guess=_bool(get("BOT7_EMAIL_SCRAPE_PATTERN_GUESS"), default=False),
 )
 
 CONFIG_DIR = Path(__file__).resolve().parents[1] / "config"

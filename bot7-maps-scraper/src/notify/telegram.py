@@ -42,13 +42,13 @@ def send_digest(
     if email_tiers and records_total:
         def _pct(n: int) -> int:
             return round(100 * n / records_total)
-        h = email_tiers.get("high", 0)
-        m = email_tiers.get("medium", 0)
-        lo = email_tiers.get("low", 0)
-        lines.append(
-            f"email tier: {_pct(emails_found)}% total — "
-            f"{_pct(h)}% high, {_pct(m)}% medium, {_pct(lo)}% low"
-        )
+        parts: list[str] = []
+        total_in_tiers = 0
+        for key in ("high", "medium", "low"):
+            if key in email_tiers:
+                parts.append(f"{_pct(email_tiers[key])}% {key}")
+                total_in_tiers += email_tiers[key]
+        lines.append(f"email tier: {_pct(total_in_tiers)}% total — " + ", ".join(parts))
     if channel_counts:
         bits = [f"{k}=<b>{v}</b>" for k, v in channel_counts.items()]
         lines.append("channels: " + "  ".join(bits))

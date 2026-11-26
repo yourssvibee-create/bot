@@ -166,9 +166,10 @@ async def _scan_domain(
             email, tier = await _extract_from_page(page)
             if email:
                 return email, tier
-        guessed = _pattern_guess(domain)
-        if guessed:
-            return guessed, "low"
+        if settings.email_scrape_pattern_guess:
+            guessed = _pattern_guess(domain)
+            if guessed:
+                return guessed, "low"
         return None, ""
     finally:
         try:

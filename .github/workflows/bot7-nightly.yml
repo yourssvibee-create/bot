@@ -57,7 +57,7 @@ jobs:
       # workflow_dispatch inputs override; schedule-run keeps production defaults.
       BOT7_DRY_RUN:              ${{ inputs.dry_run || 'false' }}
       BOT7_LISTING_PUBLISH:      ${{ inputs.listing_publish || 'false' }}
-      BOT7_SCRAPE_CAP_PER_SEGMENT: "120"
+      BOT7_SCRAPE_CAP_PER_SEGMENT: "100"
       BOT7_HUNTER_CAP_PER_SEGMENT: "40"
       BOT7_INTER_SEGMENT_SLEEP_S:  "30"
       # Matrix shard: this job only runs one vertical. If the operator

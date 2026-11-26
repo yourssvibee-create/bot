@@ -152,6 +152,10 @@ async def run(segments: Iterable[Segment] | None = None) -> int:
     for r in results:
         for k in email_tiers:
             email_tiers[k] += r.email_tiers.get(k, 0)
+    # Strip the low tier from the digest surface when pattern-guess is off —
+    # the column stays in the CSV; this just keeps the one-line summary honest.
+    if not settings.email_scrape_pattern_guess:
+        email_tiers.pop("low", None)
 
     # ---- Phase 2: populate packs + push to channels ----
     channel_counts: dict[str, int] = {}
