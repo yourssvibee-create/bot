@@ -319,16 +319,21 @@ async def _dump_failure_shot(page, segment: Segment) -> None:
 
 
 async def scrape_segment(
-    segment: Segment, *, cap: int = 120, headless: bool = True
+    segment: Segment, *, cap: int = 120, headless: bool = True, context=None
 ) -> list[Business]:
     query = segment.query
     log.info("gmaps.scrape start seg=%s cap=%s headless=%s query=%r",
              segment.slug, cap, headless, query)
 
     url = f"https://www.google.com/maps/search/{quote_plus(query)}"
-    ctx, pw = await launch_context(
-        "bot7", f"gmaps_{segment.metro.slug}", headless=headless
-    )
+    own_ctx = context is None
+    if own_ctx:
+        ctx, pw = await launch_context(
+            "bot7", f"gmaps_{segment.metro.slug}", headless=headless
+        )
+    else:
+        ctx = context
+        pw = None
     page = None
     try:
         page = await ctx.new_page()
@@ -364,14 +369,16 @@ async def scrape_segment(
                 await _dump_failure_shot(page, segment)
             raise
     finally:
-        try:
-            await ctx.close()
-        except Exception:
-            pass
-        try:
-            await pw.stop()
-        except Exception:
-            pass
+        if own_ctx:
+            try:
+                await ctx.close()
+            except Exception:
+                pass
+            if pw is not None:
+                try:
+                    await pw.stop()
+                except Exception:
+                    pass
 
 
 def scrape_segment_sync(

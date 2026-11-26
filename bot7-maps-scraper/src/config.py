@@ -35,11 +35,11 @@ class Settings:
     supabase_url: str
     supabase_anon_key: str
     supabase_service_role_key: str
-    hunter_api_key: str
+    # hunter_api_key: str          # DEFERRED — Hunter replaced by DIY contact-page scraper
     telegram_bot_token: str
     telegram_chat_id: str
     dry_run: bool
-    hunter_cap_per_segment: int
+    # hunter_cap_per_segment: int  # DEFERRED — see src/enrich/hunter.py
     inter_segment_sleep_s: int
     scrape_cap_per_segment: int
     output_dir: str
@@ -55,6 +55,9 @@ class Settings:
     scroll_max_rounds: int
     scroll_plateau_threshold: int
     scroll_pause_ms: int
+    email_scrape_concurrency: int
+    email_scrape_timeout_s: int
+    email_scrape_max_paths: int
 
 
 settings = Settings(
@@ -62,11 +65,11 @@ settings = Settings(
     supabase_url=get("SUPABASE_URL", default="") or "",
     supabase_anon_key=get("SUPABASE_ANON_KEY", default="") or "",
     supabase_service_role_key=get("SUPABASE_SERVICE_ROLE_KEY", default="") or "",
-    hunter_api_key=get("HUNTER_API_KEY", default="") or "",
+    # hunter_api_key=get("HUNTER_API_KEY", default="") or "",   # DEFERRED
     telegram_bot_token=get("TELEGRAM_BOT_TOKEN", default="") or "",
     telegram_chat_id=get("TELEGRAM_CHAT_ID", default="") or "",
     dry_run=_bool(get("BOT7_DRY_RUN"), default=True),
-    hunter_cap_per_segment=_int(get("BOT7_HUNTER_CAP_PER_SEGMENT"), 40),
+    # hunter_cap_per_segment=_int(get("BOT7_HUNTER_CAP_PER_SEGMENT"), 40),  # DEFERRED
     inter_segment_sleep_s=_int(get("BOT7_INTER_SEGMENT_SLEEP_S"), 30),
     scrape_cap_per_segment=_int(get("BOT7_SCRAPE_CAP_PER_SEGMENT"), 120),
     output_dir=get("BOT7_OUTPUT_DIR", default="output") or "output",
@@ -82,6 +85,9 @@ settings = Settings(
     scroll_max_rounds=_int(get("BOT7_SCROLL_MAX_ROUNDS"), 60),
     scroll_plateau_threshold=_int(get("BOT7_SCROLL_PLATEAU"), 2),
     scroll_pause_ms=_int(get("BOT7_SCROLL_PAUSE_MS"), 1500),
+    email_scrape_concurrency=_int(get("BOT7_EMAIL_SCRAPE_CONCURRENCY"), 8),
+    email_scrape_timeout_s=_int(get("BOT7_EMAIL_SCRAPE_TIMEOUT_S"), 5),
+    email_scrape_max_paths=_int(get("BOT7_EMAIL_SCRAPE_MAX_PATHS"), 2),
 )
 
 CONFIG_DIR = Path(__file__).resolve().parents[1] / "config"

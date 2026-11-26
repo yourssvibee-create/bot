@@ -28,6 +28,7 @@ def send_digest(
     failures: Iterable[tuple[str, str]],
     dry_run: bool,
     channel_counts: dict | None = None,
+    email_tiers: dict | None = None,
 ) -> None:
     fails = list(failures)
     tag = " [DRY]" if dry_run else ""
@@ -38,6 +39,16 @@ def send_digest(
         f"emails:   <b>{emails_found}</b>",
         f"duration: {duration_s}s",
     ]
+    if email_tiers and records_total:
+        def _pct(n: int) -> int:
+            return round(100 * n / records_total)
+        h = email_tiers.get("high", 0)
+        m = email_tiers.get("medium", 0)
+        lo = email_tiers.get("low", 0)
+        lines.append(
+            f"email tier: {_pct(emails_found)}% total — "
+            f"{_pct(h)}% high, {_pct(m)}% medium, {_pct(lo)}% low"
+        )
     if channel_counts:
         bits = [f"{k}=<b>{v}</b>" for k, v in channel_counts.items()]
         lines.append("channels: " + "  ".join(bits))

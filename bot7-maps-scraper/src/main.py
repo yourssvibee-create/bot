@@ -19,9 +19,10 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from shared.logging import configure, get_logger
+from shared.playwright_base import launch_context
 
 from .config import settings
-from .enrich.hunter import enrich_batch
+from .enrich.email_scraper import extract_emails, tier_to_int
 from .listing.publish import PackSpec, list_to_channels, populate_packs
 from .notify.telegram import send_digest
 from .output.csv_writer import write_segment_csv
@@ -60,39 +61,69 @@ class SegmentResult:
     segment: Segment
     records: int
     emails: int
+    email_tiers: dict          # {"high": int, "medium": int, "low": int}
     csv_path: Optional[Path]
     rows: list                      # list[Business], kept for the listing phase
     error: Optional[str]
 
 
+_EMPTY_TIERS = {"high": 0, "medium": 0, "low": 0}
+
+
 async def _run_segment(seg: Segment) -> SegmentResult:
+    ctx, pw = await launch_context("bot7", f"gmaps_{seg.metro.slug}", headless=True)
     try:
-        rows = await scrape_segment(seg, cap=settings.scrape_cap_per_segment)
-    except Exception as e:
-        traceback.print_exc()
-        return SegmentResult(seg, 0, 0, None, [], f"scrape: {e}")
+        try:
+            rows = await scrape_segment(
+                seg, cap=settings.scrape_cap_per_segment, context=ctx
+            )
+        except Exception as e:
+            traceback.print_exc()
+            return SegmentResult(seg, 0, 0, dict(_EMPTY_TIERS), None, [], f"scrape: {e}")
 
-    if not rows:
-        return SegmentResult(seg, 0, 0, None, [], "scrape: 0 records")
+        if not rows:
+            return SegmentResult(seg, 0, 0, dict(_EMPTY_TIERS), None, [], "scrape: 0 records")
 
-    try:
-        rows = await enrich_batch(rows, cap=settings.hunter_cap_per_segment)
-    except Exception as e:
-        log.warning("bot7.enrich.fail seg=%s err=%s", seg.slug, e)
+        tiers = dict(_EMPTY_TIERS)
+        try:
+            domains = [b.domain for b in rows if b.domain]
+            if domains:
+                found = await extract_emails(domains, context=ctx)
+                by_domain: dict[str, tuple[str | None, str]] = found
+                for b in rows:
+                    if not b.domain:
+                        continue
+                    email, tier = by_domain.get(b.domain, (None, ""))
+                    if email:
+                        b.owner_email = email
+                        b.email_confidence = tier_to_int(tier)
+                        if tier in tiers:
+                            tiers[tier] += 1
+        except Exception as e:
+            log.warning("bot7.enrich.fail seg=%s err=%s", seg.slug, e)
 
-    emails = sum(1 for b in rows if b.owner_email)
+        emails = sum(1 for b in rows if b.owner_email)
 
-    try:
-        csv_path = write_segment_csv(seg, rows)
-    except Exception as e:
-        return SegmentResult(seg, len(rows), emails, None, [], f"csv: {e}")
+        try:
+            csv_path = write_segment_csv(seg, rows)
+        except Exception as e:
+            return SegmentResult(seg, len(rows), emails, tiers, None, [], f"csv: {e}")
 
-    try:
-        upsert_businesses(seg, rows)
-    except Exception as e:
-        log.warning("bot7.db.fail seg=%s err=%s", seg.slug, e)
+        try:
+            upsert_businesses(seg, rows)
+        except Exception as e:
+            log.warning("bot7.db.fail seg=%s err=%s", seg.slug, e)
 
-    return SegmentResult(seg, len(rows), emails, csv_path, rows, None)
+        return SegmentResult(seg, len(rows), emails, tiers, csv_path, rows, None)
+    finally:
+        try:
+            await ctx.close()
+        except Exception:
+            pass
+        try:
+            await pw.stop()
+        except Exception:
+            pass
 
 
 async def run(segments: Iterable[Segment] | None = None) -> int:
@@ -117,6 +148,10 @@ async def run(segments: Iterable[Segment] | None = None) -> int:
     failures = [(r.segment.slug, r.error or "") for r in results if r.error]
     total_records = sum(r.records for r in results)
     total_emails = sum(r.emails for r in results)
+    email_tiers = {"high": 0, "medium": 0, "low": 0}
+    for r in results:
+        for k in email_tiers:
+            email_tiers[k] += r.email_tiers.get(k, 0)
 
     # ---- Phase 2: populate packs + push to channels ----
     channel_counts: dict[str, int] = {}
@@ -160,6 +195,7 @@ async def run(segments: Iterable[Segment] | None = None) -> int:
         failures=failures,
         dry_run=settings.dry_run,
         channel_counts=channel_counts or None,
+        email_tiers=email_tiers,
     )
 
     log.info(

@@ -1,3 +1,7 @@
+# DEFERRED — Hunter.io free tier is rate-limited to the point of uselessness
+# for Bot 7's 40/segment × 192 segments nightly fan-out. Replaced by the DIY
+# contact-page scraper in src/enrich/email_scraper.py. Keep this module on
+# disk in case we move to Hunter's paid tier later.
 """Hunter.io domain -> owner email enrichment. Best-effort, fail-soft."""
 from __future__ import annotations
 
