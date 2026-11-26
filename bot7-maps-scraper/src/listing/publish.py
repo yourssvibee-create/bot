@@ -196,6 +196,10 @@ async def list_to_channels(packs: list[PackSpec]) -> dict[str, int]:
             counts[ch_name]["ok"] += 1
         else:
             counts[ch_name]["fail"] += 1
+            log.warning(
+                "list.push.fail seg=%s ch=%s pid=%s err=%s",
+                seg_slug, ch_name, res.product_id or "-", res.error,
+            )
         update_pack_channel(
             segment_slug=seg_slug, channel=ch_name,
             product_id=res.product_id, product_url=res.product_url,

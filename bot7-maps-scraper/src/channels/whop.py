@@ -93,13 +93,14 @@ class WhopLister(ChannelLister):
                 if not pid:
                     return ListResult(ok=False, error=f"whop.create: no id in {body}")
 
-                # 2) monthly plan — monthly refresh tier only.
-                plan_err = await self._attach_monthly_plan(client, pid, req.metadata.price_cents)
+                # 2) monthly plan — monthly refresh tier only. A product
+                # without a plan is unsellable on Whop, so plan attach failure
+                # flips ok=False even though the product row exists.
+                plan_ok, plan_err = await self._attach_monthly_plan(client, pid, req.metadata.price_cents)
                 # 3) file delivery is dashboard-only for the Whop v1 API;
                 # product stays attachment-less until a human wires an
                 # experience + Files app in the dashboard.
-                err = plan_err
-                return ListResult(ok=True, product_id=pid, product_url=url, error=err)
+                return ListResult(ok=plan_ok, product_id=pid, product_url=url, error=plan_err)
         except httpx.HTTPError as e:
             return ListResult(ok=False, error=f"whop.create: {e}")
 
@@ -148,7 +149,7 @@ class WhopLister(ChannelLister):
 
     async def _attach_monthly_plan(
         self, client: httpx.AsyncClient, product_id: str, price_cents: int
-    ) -> str:
+    ) -> tuple[bool, str]:
         # Whop v1 renewal plan. Field names follow the v1 plans surface;
         # a soft fail here doesn't block the product listing — a human
         # can add the plan from the dashboard if the create rejects.
@@ -165,7 +166,7 @@ class WhopLister(ChannelLister):
                 },
             )
             if r.status_code >= 400:
-                return f"whop.plan status={r.status_code}: {r.text[:200]}"
+                return False, f"whop.plan status={r.status_code}: {r.text[:200]}"
         except Exception as e:
-            return f"whop.plan: {e}"
-        return ""
+            return False, f"whop.plan: {e}"
+        return True, ""

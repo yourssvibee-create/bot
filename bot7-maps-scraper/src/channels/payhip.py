@@ -82,8 +82,8 @@ class PayhipLister(ChannelLister):
                 url = body.get("link") or body.get("product_url") or ""
                 if not pid:
                     return ListResult(ok=False, error=f"payhip.create: no id in {body}")
-                upload_err = await self._upload_file(client, pid, req.csv_path)
-                return ListResult(ok=True, product_id=pid, product_url=url, error=upload_err or "")
+                upload_ok, upload_err = await self._upload_file(client, pid, req.csv_path)
+                return ListResult(ok=upload_ok, product_id=pid, product_url=url, error=upload_err or "")
         except httpx.HTTPError as e:
             return ListResult(ok=False, error=f"payhip.create: {e}")
 
@@ -109,9 +109,9 @@ class PayhipLister(ChannelLister):
                 r = await self._request(client, "PUT", f"/products/{pid}", json=payload)
                 if r.status_code >= 400:
                     return ListResult(ok=False, product_id=pid, error=f"payhip.update {r.status_code}: {r.text[:200]}")
-                upload_err = await self._upload_file(client, pid, req.csv_path)
+                upload_ok, upload_err = await self._upload_file(client, pid, req.csv_path)
                 return ListResult(
-                    ok=True, product_id=pid,
+                    ok=upload_ok, product_id=pid,
                     product_url=f"https://payhip.com/b/{pid}",
                     error=upload_err or "",
                 )
@@ -134,7 +134,7 @@ class PayhipLister(ChannelLister):
 
     async def _upload_file(
         self, client: httpx.AsyncClient, product_id: str, csv_path: Path
-    ) -> str:
+    ) -> tuple[bool, str]:
         try:
             with csv_path.open("rb") as f:
                 files = {"file": (csv_path.name, f, "text/csv")}
@@ -143,7 +143,7 @@ class PayhipLister(ChannelLister):
                     headers=self._headers(), files=files,
                 )
             if r.status_code >= 400:
-                return f"payhip.file.push status={r.status_code}: {r.text[:200]}"
+                return False, f"payhip.file.push status={r.status_code}: {r.text[:200]}"
         except Exception as e:
-            return f"payhip.file.push: {e}"
-        return ""
+            return False, f"payhip.file.push: {e}"
+        return True, ""

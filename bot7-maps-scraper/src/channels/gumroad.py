@@ -15,6 +15,7 @@ leaving a note in error_note if that pathway refuses.
 """
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -85,9 +86,9 @@ class GumroadLister(ChannelLister):
                 if not pid:
                     return ListResult(ok=False, error=f"gumroad: no product_id in response: {body}")
 
-                upload_err = await self._upload_file(client, pid, req.csv_path)
+                upload_ok, upload_err = await self._upload_file(client, pid, req.csv_path)
                 return ListResult(
-                    ok=True, product_id=pid, product_url=url,
+                    ok=upload_ok, product_id=pid, product_url=url,
                     error=upload_err or "",
                 )
         except httpx.HTTPError as e:
@@ -115,9 +116,9 @@ class GumroadLister(ChannelLister):
                     "price": str(req.metadata.price_cents),
                 }
                 await self._put(client, f"/products/{pid}", data=payload)
-                upload_err = await self._upload_file(client, pid, req.csv_path)
+                upload_ok, upload_err = await self._upload_file(client, pid, req.csv_path)
                 return ListResult(
-                    ok=True, product_id=pid,
+                    ok=upload_ok, product_id=pid,
                     product_url=f"https://gumroad.com/l/{pid}",
                     error=upload_err or "",
                 )
@@ -142,16 +143,16 @@ class GumroadLister(ChannelLister):
 
     async def _upload_file(
         self, client: httpx.AsyncClient, product_id: str, csv_path: Path
-    ) -> str:
+    ) -> tuple[bool, str]:
         """Gumroad v2 file upload is a 4-step S3 presigned-multipart flow:
           1. POST /v2/files/presign      -> upload_id, key, file_url, parts[]
           2. PUT each part's presigned S3 URL with the chunk bytes
           3. POST /v2/files/complete     -> finalize the multipart upload
           4. PUT  /v2/products/{id}      -> attach via files[][url]=<file_url>
 
-        Returns "" on success or a short diagnostic. CSVs are small, so
-        the presign usually returns a single part; we still handle N
-        parts defensively.
+        Returns (True, "") on success or (False, "<diagnostic>") on any
+        failure. CSVs are small, so the presign usually returns a single
+        part; we still handle N parts defensively.
         """
         try:
             size = csv_path.stat().st_size
@@ -165,14 +166,20 @@ class GumroadLister(ChannelLister):
                 },
             )
             if r.status_code >= 400:
-                return f"gumroad.presign status={r.status_code}: {r.text[:200]}"
+                return False, f"gumroad.presign status={r.status_code}: {r.text[:200]}"
             j = r.json()
             upload_id = j.get("upload_id")
             key = j.get("key")
             file_url = j.get("file_url")
             parts = j.get("parts") or []
             if not (upload_id and key and file_url and parts):
-                return f"gumroad.presign: unexpected body {str(j)[:200]}"
+                try:
+                    keys = list(j.keys()) if isinstance(j, dict) else type(j).__name__
+                    body_str = json.dumps(j)[:1000]
+                except Exception:
+                    keys, body_str = "<unknown>", str(j)[:1000]
+                log.warning("gumroad.presign.unexpected keys=%s body=%s", keys, body_str)
+                return False, f"gumroad.presign: unexpected body {body_str[:200]}"
 
             # 2) upload each part. Part N's chunk size = size // len(parts)
             # for the first N-1 parts, remainder on the last.
@@ -184,11 +191,11 @@ class GumroadLister(ChannelLister):
                     part_number = p.get("part_number") or (i + 1)
                     url_ = p.get("url") or ""
                     if not url_:
-                        return f"gumroad.part {part_number}: no url in presign"
+                        return False, f"gumroad.part {part_number}: no url in presign"
                     chunk = f.read(per if i < n - 1 else size - per * (n - 1))
                     pr = await client.put(url_, content=chunk)
                     if pr.status_code >= 400:
-                        return f"gumroad.part {part_number} status={pr.status_code}: {pr.text[:200]}"
+                        return False, f"gumroad.part {part_number} status={pr.status_code}: {pr.text[:200]}"
                     etag = pr.headers.get("ETag", "").strip('"')
                     completed.append({"part_number": part_number, "etag": etag})
 
@@ -203,7 +210,7 @@ class GumroadLister(ChannelLister):
                 },
             )
             if cr.status_code >= 400:
-                return f"gumroad.complete status={cr.status_code}: {cr.text[:200]}"
+                return False, f"gumroad.complete status={cr.status_code}: {cr.text[:200]}"
 
             # 4) attach the finalized file_url to the product
             ar = await client.put(
@@ -214,7 +221,7 @@ class GumroadLister(ChannelLister):
                 },
             )
             if ar.status_code >= 400:
-                return f"gumroad.attach status={ar.status_code}: {ar.text[:200]}"
+                return False, f"gumroad.attach status={ar.status_code}: {ar.text[:200]}"
         except Exception as e:
-            return f"gumroad.file.push: {e}"
-        return ""
+            return False, f"gumroad.file.push: {e}"
+        return True, ""
