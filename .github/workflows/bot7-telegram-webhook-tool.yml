@@ -1,0 +1,31 @@
+name: bot7-telegram-webhook-tool
+
+# One-off utility: inspect the Telegram bot's webhook config, and
+# optionally delete it so the approval poller (getUpdates-based) can
+# run. Run via Actions → Run workflow.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "info = show webhook URL only; delete = remove the webhook"
+        required: true
+        default: "info"
+        type: choice
+        options: ["info", "delete"]
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      TOKEN: ${{ secrets.BOT7_TELEGRAM_BOT_TOKEN }}
+    steps:
+      - name: getWebhookInfo
+        run: |
+          curl -s "https://api.telegram.org/bot${TOKEN}/getWebhookInfo" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps(d,indent=2))"
+
+      - name: deleteWebhook
+        if: ${{ inputs.action == 'delete' }}
+        run: |
+          curl -s "https://api.telegram.org/bot${TOKEN}/deleteWebhook?drop_pending_updates=false" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps(d,indent=2))"
