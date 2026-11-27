@@ -92,6 +92,7 @@ class WhopLister(ChannelLister):
                 url = body.get("route") or body.get("url") or ""
                 if not pid:
                     return ListResult(ok=False, error=f"whop.create: no id in {body}")
+                log.info("whop.create.product ok pid=%s url=%s", pid, url or f"https://whop.com/{pid}")
 
                 # 2) monthly plan — monthly refresh tier only. A product
                 # without a plan is unsellable on Whop, so plan attach failure
@@ -167,6 +168,12 @@ class WhopLister(ChannelLister):
             )
             if r.status_code >= 400:
                 return False, f"whop.plan status={r.status_code}: {r.text[:200]}"
+            try:
+                pbody = r.json() if r.content else {}
+                plan_id = str(pbody.get("id") or "")
+            except Exception:
+                plan_id = ""
+            log.info("whop.create.plan    ok plan_id=%s pid=%s", plan_id, product_id)
         except Exception as e:
             return False, f"whop.plan: {e}"
         return True, ""

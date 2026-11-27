@@ -85,6 +85,7 @@ class GumroadLister(ChannelLister):
                 url = prod.get("short_url") or prod.get("url") or ""
                 if not pid:
                     return ListResult(ok=False, error=f"gumroad: no product_id in response: {body}")
+                log.info("gumroad.product ok pid=%s url=%s", pid, url)
 
                 upload_ok, upload_err = await self._upload_file(client, pid, req.csv_path)
                 return ListResult(
@@ -116,6 +117,7 @@ class GumroadLister(ChannelLister):
                     "price": str(req.metadata.price_cents),
                 }
                 await self._put(client, f"/products/{pid}", data=payload)
+                log.info("gumroad.product ok pid=%s url=%s", pid, f"https://gumroad.com/l/{pid}")
                 upload_ok, upload_err = await self._upload_file(client, pid, req.csv_path)
                 return ListResult(
                     ok=upload_ok, product_id=pid,
@@ -172,6 +174,12 @@ class GumroadLister(ChannelLister):
             key = j.get("key")
             file_url = j.get("file_url")
             parts = j.get("parts") or []
+            log.info(
+                "gumroad.presign.parts n=%s part0=%s body=%s",
+                len(parts),
+                json.dumps(parts[0] if parts else {})[:400],
+                json.dumps(j)[:1000],
+            )
             if not (upload_id and key and file_url and parts):
                 try:
                     keys = list(j.keys()) if isinstance(j, dict) else type(j).__name__
