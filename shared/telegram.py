@@ -74,3 +74,94 @@ def answer_callback_query(callback_query_id: str, text: Optional[str] = None) ->
         httpx.post(_url("answerCallbackQuery"), json=payload, timeout=10)
     except Exception as e:
         log.warning("telegram_ack_failed", extra={"err": str(e)})
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1.5, min=1, max=10))
+def send_with_keyboard(
+    text: str,
+    *,
+    keyboard: list[list[dict[str, str]]],
+    parse_mode: str = "HTML",
+) -> dict[str, Any]:
+    """Send a message with an arbitrary inline keyboard (rows of
+    {text, callback_data} buttons)."""
+    payload: dict[str, Any] = {
+        "chat_id": _chat(),
+        "text": text,
+        "parse_mode": parse_mode,
+        "disable_web_page_preview": True,
+        "reply_markup": {"inline_keyboard": keyboard},
+    }
+    r = httpx.post(_url("sendMessage"), json=payload, timeout=20)
+    if r.status_code >= 400:
+        log.warning("telegram.send.http status=%s body=%s", r.status_code, r.text[:400])
+    r.raise_for_status()
+    return r.json()
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1.5, min=1, max=10))
+def send_force_reply(text: str, *, parse_mode: str = "HTML") -> dict[str, Any]:
+    """Send a message that forces the user's next tap to be a reply to it.
+    Used by the approve/edit flow — the poller matches the reply back to
+    the pending edit via (chat_id, message_id)."""
+    payload: dict[str, Any] = {
+        "chat_id": _chat(),
+        "text": text,
+        "parse_mode": parse_mode,
+        "disable_web_page_preview": True,
+        "reply_markup": {"force_reply": True, "selective": False},
+    }
+    r = httpx.post(_url("sendMessage"), json=payload, timeout=20)
+    if r.status_code >= 400:
+        log.warning("telegram.send.http status=%s body=%s", r.status_code, r.text[:400])
+    r.raise_for_status()
+    return r.json()
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1.5, min=1, max=10))
+def edit_message_text(
+    *,
+    chat_id: str | int,
+    message_id: int,
+    text: str,
+    keyboard: Optional[list[list[dict[str, str]]]] = None,
+    parse_mode: str = "HTML",
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "text": text,
+        "parse_mode": parse_mode,
+        "disable_web_page_preview": True,
+    }
+    if keyboard is not None:
+        payload["reply_markup"] = {"inline_keyboard": keyboard}
+    r = httpx.post(_url("editMessageText"), json=payload, timeout=20)
+    if r.status_code >= 400:
+        log.warning("telegram.edit.http status=%s body=%s", r.status_code, r.text[:400])
+    r.raise_for_status()
+    return r.json()
+
+
+def get_updates(offset: int, *, timeout: int = 10) -> list[dict[str, Any]]:
+    """Long-poll Telegram for updates since `offset`. Returns the raw
+    `result` array; the caller is responsible for computing the next
+    offset as max(update_id)+1."""
+    payload: dict[str, Any] = {
+        "offset": offset,
+        "timeout": timeout,
+        "allowed_updates": ["message", "callback_query"],
+    }
+    try:
+        r = httpx.post(_url("getUpdates"), json=payload, timeout=timeout + 5)
+    except httpx.HTTPError as e:
+        log.warning("telegram.poll.http err=%s", e)
+        return []
+    if r.status_code >= 400:
+        log.warning("telegram.poll.http status=%s body=%s", r.status_code, r.text[:400])
+        return []
+    body = r.json() if r.content else {}
+    if not body.get("ok"):
+        log.warning("telegram.poll.not_ok body=%s", str(body)[:400])
+        return []
+    return body.get("result") or []

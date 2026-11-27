@@ -1,0 +1,74 @@
+name: bot7-approval-poll
+
+# Polls Telegram getUpdates every 5 min, processes button taps
+# (approve / reject / edit-*) and replies to force_reply prompts.
+# Reads/writes offset in bot7_telegram_offset so re-runs don't
+# reprocess the same callback.
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: bot7-approval-poll
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: bot7-maps-scraper
+    env:
+      DATABASE_URL:              ${{ secrets.BOT7_DATABASE_URL }}
+      SUPABASE_URL:              ${{ secrets.BOT7_SUPABASE_URL }}
+      SUPABASE_ANON_KEY:         ${{ secrets.BOT7_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.BOT7_SUPABASE_SERVICE_ROLE_KEY }}
+      TELEGRAM_BOT_TOKEN:        ${{ secrets.BOT7_TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID:          ${{ secrets.BOT7_TELEGRAM_CHAT_ID }}
+      BOT7_GUMROAD_ACCESS_TOKEN: ${{ secrets.BOT7_GUMROAD_ACCESS_TOKEN }}
+      BOT7_WHOP_API_KEY:         ${{ secrets.BOT7_WHOP_API_KEY }}
+      BOT_ID:                    bot7
+      LOG_LEVEL:                 INFO
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install poetry
+        run: pipx install poetry==2.5.1
+
+      - name: Install deps
+        run: poetry install --no-interaction --no-ansi --no-root
+
+      - name: Apply pending Supabase migrations (idempotent)
+        run: |
+          poetry run python -c "
+          import os, glob, psycopg
+          url = os.environ['DATABASE_URL']
+          for f in sorted(glob.glob('supabase/migrations/*.sql')):
+              sql = open(f).read()
+              with psycopg.connect(url, autocommit=True, prepare_threshold=None) as c, c.cursor() as cur:
+                  cur.execute(sql)
+              print(f'applied {f}')
+          "
+
+      - name: Seed .env for shared.config isolation
+        run: |
+          echo "BOT_ID=bot7" > .env
+          echo "DATABASE_URL=${DATABASE_URL}" >> .env
+          echo "SUPABASE_URL=${SUPABASE_URL}" >> .env
+          echo "SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}" >> .env
+          echo "SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}" >> .env
+          echo "TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}" >> .env
+          echo "TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}" >> .env
+          echo "BOT7_GUMROAD_ACCESS_TOKEN=${BOT7_GUMROAD_ACCESS_TOKEN}" >> .env
+          echo "BOT7_WHOP_API_KEY=${BOT7_WHOP_API_KEY}" >> .env
+
+      - name: Poll Telegram for approvals
+        run: poetry run python -m workers.approval_poll

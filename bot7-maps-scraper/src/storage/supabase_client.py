@@ -246,6 +246,181 @@ def fetch_ready_packs(
         return [dict(zip(cols, r)) for r in cur.fetchall()]
 
 
+def set_pack_approval_message(
+    *, segment_slug: str, chat_id: str | int, message_id: int
+) -> None:
+    """Remember the Telegram approval message so the poller can find
+    the pack when the user taps a button."""
+    if settings.dry_run:
+        return
+    sql = """
+    update bot7_packs set
+        approval_message_id = %s,
+        edit_prompt_chat_id = %s
+    where segment_slug = %s
+    """
+    with _conn() as c, c.cursor() as cur:
+        cur.execute(sql, (str(message_id), str(chat_id), segment_slug))
+
+
+def find_pack_by_message(
+    *, chat_id: str | int, message_id: int
+) -> Optional[dict]:
+    """Locate the pack by its approval message or its pending edit prompt."""
+    sql = """
+    select segment_slug, title, description, price_cents, price_kind,
+           record_count, gumroad_product_id, whop_product_id,
+           download_url, approved_at, published_at,
+           edit_pending_field, edit_prompt_message_id, edit_prompt_chat_id
+    from bot7_packs
+    where (approval_message_id = %s or edit_prompt_message_id = %s)
+      and (edit_prompt_chat_id = %s or edit_prompt_chat_id is null)
+    order by last_built_at desc nulls last
+    limit 1
+    """
+    with _conn() as c, c.cursor() as cur:
+        cur.execute(sql, (str(message_id), str(message_id), str(chat_id)))
+        row = cur.fetchone()
+        if not row:
+            return None
+        cols = [d.name for d in cur.description]
+        return dict(zip(cols, row))
+
+
+def find_pack_by_segment(segment_slug: str) -> Optional[dict]:
+    sql = """
+    select segment_slug, title, description, price_cents, price_kind,
+           record_count, gumroad_product_id, whop_product_id,
+           download_url, approved_at, published_at,
+           approval_message_id, edit_prompt_chat_id
+    from bot7_packs
+    where segment_slug = %s
+    limit 1
+    """
+    with _conn() as c, c.cursor() as cur:
+        cur.execute(sql, (segment_slug,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        cols = [d.name for d in cur.description]
+        return dict(zip(cols, row))
+
+
+def set_pack_edit_pending(
+    *, segment_slug: str, field: str,
+    prompt_chat_id: str | int, prompt_message_id: int,
+) -> None:
+    """Record 'we asked the user to reply with a new <field>'."""
+    if settings.dry_run:
+        return
+    sql = """
+    update bot7_packs set
+        edit_pending_field = %s,
+        edit_prompt_chat_id = %s,
+        edit_prompt_message_id = %s
+    where segment_slug = %s
+    """
+    with _conn() as c, c.cursor() as cur:
+        cur.execute(sql, (field, str(prompt_chat_id), str(prompt_message_id), segment_slug))
+
+
+def clear_pack_edit_pending(segment_slug: str) -> None:
+    if settings.dry_run:
+        return
+    sql = """
+    update bot7_packs set
+        edit_pending_field = null,
+        edit_prompt_message_id = null
+    where segment_slug = %s
+    """
+    with _conn() as c, c.cursor() as cur:
+        cur.execute(sql, (segment_slug,))
+
+
+def apply_pack_edit(
+    *, segment_slug: str, field: str, new_value: str,
+) -> None:
+    """Apply an edited title/price/description to bot7_packs. Price
+    comes in as a string that may be '$49' or '49' — strip and coerce
+    to int cents for price, store as text for title/description."""
+    if settings.dry_run:
+        return
+    if field == "title":
+        sql = "update bot7_packs set title = %s where segment_slug = %s"
+        with _conn() as c, c.cursor() as cur:
+            cur.execute(sql, (new_value.strip()[:200], segment_slug))
+    elif field == "description":
+        sql = "update bot7_packs set description = %s where segment_slug = %s"
+        with _conn() as c, c.cursor() as cur:
+            cur.execute(sql, (new_value.strip()[:4000], segment_slug))
+    elif field == "price":
+        digits = "".join(ch for ch in new_value if ch.isdigit())
+        if not digits:
+            raise ValueError(f"no digits in price input: {new_value!r}")
+        price_usd = int(digits)
+        sql = """
+        update bot7_packs set
+            price_usd = %s,
+            price_cents = %s
+        where segment_slug = %s
+        """
+        with _conn() as c, c.cursor() as cur:
+            cur.execute(sql, (price_usd, price_usd * 100, segment_slug))
+    else:
+        raise ValueError(f"unknown edit field: {field}")
+
+
+def mark_pack_published(
+    *, segment_slug: str, approved_by: str,
+    gumroad_live_url: str = "", whop_live_url: str = "",
+    publish_error: str = "",
+) -> None:
+    if settings.dry_run:
+        return
+    sql = """
+    update bot7_packs set
+        approved_at = coalesce(approved_at, now()),
+        approved_by = coalesce(approved_by, %s),
+        published_at = case when %s = '' then now() else published_at end,
+        publish_error = nullif(%s, ''),
+        status = case when %s = '' then 'listed' else status end
+    where segment_slug = %s
+    """
+    with _conn() as c, c.cursor() as cur:
+        cur.execute(
+            sql,
+            (approved_by, publish_error, publish_error, publish_error, segment_slug),
+        )
+
+
+def mark_pack_rejected(*, segment_slug: str, approved_by: str) -> None:
+    if settings.dry_run:
+        return
+    sql = """
+    update bot7_packs set
+        approved_at = coalesce(approved_at, now()),
+        approved_by = coalesce(approved_by, %s),
+        status = 'rejected'
+    where segment_slug = %s
+    """
+    with _conn() as c, c.cursor() as cur:
+        cur.execute(sql, (approved_by, segment_slug))
+
+
+def get_telegram_offset() -> int:
+    sql = "select last_offset from bot7_telegram_offset where id = 1"
+    with _conn() as c, c.cursor() as cur:
+        cur.execute(sql)
+        row = cur.fetchone()
+        return int(row[0]) if row else 0
+
+
+def set_telegram_offset(offset: int) -> None:
+    sql = "update bot7_telegram_offset set last_offset = %s, updated_at = now() where id = 1"
+    with _conn() as c, c.cursor() as cur:
+        cur.execute(sql, (int(offset),))
+
+
 def set_pack_download_url(*, segment_slug: str, url: str) -> None:
     """Persist the signed Supabase Storage URL on bot7_packs so the
     approval poller can resurrect it without re-uploading."""

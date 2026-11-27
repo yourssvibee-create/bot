@@ -24,9 +24,11 @@ from ..channels.whop import WhopLister
 from ..config import settings
 from ..output.csv_writer import output_root
 from ..segments import load_pricing
+from ..notify.approval import send_approval_prompt
 from ..storage.csv_host import upload_and_sign
 from ..storage.supabase_client import (
     fetch_ready_packs,
+    set_pack_approval_message,
     set_pack_download_url,
     update_pack_channel,
     upsert_pack,
@@ -235,4 +237,64 @@ async def list_to_channels(packs: list[PackSpec]) -> dict[str, int]:
         flat[f"{n}_ok"] = c["ok"]
         flat[f"{n}_fail"] = c["fail"]
     log.info("list.done counts=%s", flat)
+
+    # Send one Telegram approval prompt per segment that has drafts
+    # on EVERY active channel — we don't bug the operator with half-
+    # published packs; those surface in the digest instead.
+    #
+    # Only runs when BOT7_LISTING_PUBLISH is false (drafts mode). If
+    # the operator set LISTING_PUBLISH=true they explicitly asked the
+    # channel to publish straight away — no approval step needed.
+    if not settings.listing_publish:
+        _send_approval_prompts(packs, results, task_meta, pricing, download_urls)
+
     return flat
+
+
+def _send_approval_prompts(
+    packs: list[PackSpec],
+    results: list,
+    task_meta: list[tuple[str, str, int]],
+    pricing: dict,
+    download_urls: dict[str, str],
+) -> None:
+    import os
+    # Group results by segment to find segments that drafted on both
+    # channels successfully.
+    by_seg: dict[str, dict[str, object]] = {}
+    for (seg_slug, ch_name, _), out in zip(task_meta, results):
+        if isinstance(out, BaseException):
+            continue
+        _, _req, res = out
+        if not res.ok:
+            continue
+        by_seg.setdefault(seg_slug, {})[ch_name] = res
+
+    pack_by_seg = {p.segment.slug: p for p in packs}
+    for seg_slug, channel_results in by_seg.items():
+        pack = pack_by_seg.get(seg_slug)
+        if not pack:
+            continue
+        gum_res = channel_results.get("gumroad")
+        whop_res = channel_results.get("whop")
+        if not (gum_res and whop_res):
+            # Partial — operator will see it in the digest, not as an approval prompt.
+            continue
+        tier = pack.segment.metro.tier
+        price = int(pricing[tier]["one_time"])
+        msg_id = send_approval_prompt(
+            segment_slug=seg_slug,
+            title=f"{pack.segment.metro.name} {pack.segment.vertical.name} — {len(pack.rows)} leads",
+            price_usd=price,
+            price_kind="one_time",
+            record_count=len(pack.rows),
+            emails_found=sum(1 for b in pack.rows if b.owner_email),
+            gumroad_url=getattr(gum_res, "product_url", "") or "",
+            whop_url=getattr(whop_res, "product_url", "") or "",
+            download_url=download_urls.get(seg_slug, ""),
+        )
+        chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
+        if msg_id and chat_id:
+            set_pack_approval_message(
+                segment_slug=seg_slug, chat_id=chat_id, message_id=msg_id,
+            )
