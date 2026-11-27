@@ -246,6 +246,21 @@ def fetch_ready_packs(
         return [dict(zip(cols, r)) for r in cur.fetchall()]
 
 
+def set_pack_download_url(*, segment_slug: str, url: str) -> None:
+    """Persist the signed Supabase Storage URL on bot7_packs so the
+    approval poller can resurrect it without re-uploading."""
+    if settings.dry_run or not url:
+        return
+    sql = """
+    update bot7_packs set
+        download_url = %s,
+        download_url_expires = now() + interval '90 days'
+    where segment_slug = %s
+    """
+    with _conn() as c, c.cursor() as cur:
+        cur.execute(sql, (url, segment_slug))
+
+
 _CHANNEL_COLS = {
     "gumroad": ("gumroad_product_id", "gumroad_listed_at", "gumroad_last_pushed_at"),
     "payhip":  ("payhip_product_id",  "payhip_listed_at",  "payhip_last_pushed_at"),

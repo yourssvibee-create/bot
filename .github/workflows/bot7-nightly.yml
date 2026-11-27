@@ -82,6 +82,19 @@ jobs:
       - name: Install playwright chromium
         run: poetry run playwright install --with-deps chromium
 
+      - name: Apply pending Supabase migrations (idempotent)
+        run: |
+          poetry run python -c "
+          import os, glob, psycopg
+          url = os.environ['DATABASE_URL']
+          files = sorted(glob.glob('supabase/migrations/*.sql'))
+          for f in files:
+              sql = open(f).read()
+              with psycopg.connect(url, autocommit=True, prepare_threshold=None) as c, c.cursor() as cur:
+                  cur.execute(sql)
+              print(f'applied {f}')
+          "
+
       - name: Seed .env for shared.config isolation
         run: |
           echo "BOT_ID=bot7" > .env

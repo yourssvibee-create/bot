@@ -24,7 +24,13 @@ from ..channels.whop import WhopLister
 from ..config import settings
 from ..output.csv_writer import output_root
 from ..segments import load_pricing
-from ..storage.supabase_client import fetch_ready_packs, update_pack_channel, upsert_pack
+from ..storage.csv_host import upload_and_sign
+from ..storage.supabase_client import (
+    fetch_ready_packs,
+    set_pack_download_url,
+    update_pack_channel,
+    upsert_pack,
+)
 from ..types import Business, Segment
 from .metadata import build_metadata, write_sample_csv
 
@@ -141,6 +147,22 @@ async def list_to_channels(packs: list[PackSpec]) -> dict[str, int]:
     db_rows = fetch_ready_packs(segment_slugs=seg_slugs) if seg_slugs else []
     db_by_seg = {r["segment_slug"]: r for r in db_rows}
 
+    # Upload the CSV to Supabase Storage ONCE per segment (not per channel)
+    # and reuse the signed URL across every adapter. A blank URL is OK —
+    # the adapter fallback is "no download link", which the digest surfaces.
+    download_urls: dict[str, str] = {}
+    for pack in packs:
+        if len(pack.rows) < settings.min_records_for_ready:
+            continue
+        try:
+            _, signed = upload_and_sign(pack.segment.slug, pack.csv_path)
+        except Exception as e:
+            log.warning("csv_host.exc seg=%s err=%s", pack.segment.slug, e)
+            signed = ""
+        download_urls[pack.segment.slug] = signed
+        if signed:
+            set_pack_download_url(segment_slug=pack.segment.slug, url=signed)
+
     tasks: list[asyncio.Task] = []
     task_meta: list[tuple[str, str, int]] = []  # (segment_slug, channel, price_cents)
 
@@ -174,6 +196,7 @@ async def list_to_channels(packs: list[PackSpec]) -> dict[str, int]:
                 metadata=meta,
                 csv_path=pack.csv_path,
                 existing_product_id=existing_id,
+                download_url=download_urls.get(seg.slug, ""),
             )
             tasks.append(asyncio.create_task(_push_one(lister, req)))
             task_meta.append((seg.slug, ch_name, meta.price_cents))

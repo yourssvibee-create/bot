@@ -36,6 +36,26 @@ log = get_logger("bot7.channels.gumroad")
 _BASE = "https://api.gumroad.com/v2"
 
 
+def _with_download(description: str, download_url: str) -> str:
+    """Append a buyer-visible 'after purchase you'll receive a download
+    link' hint to the description. The actual URL only goes in the
+    receipt — we don't leak it on the sales page."""
+    if not download_url:
+        return description
+    note = "\n\nYour download link is delivered immediately after purchase (in your receipt email and on the Gumroad download page)."
+    return description.rstrip() + note
+
+
+def _receipt(download_url: str) -> str:
+    """Post-purchase receipt. Rendered as HTML by Gumroad."""
+    return (
+        '<p>Thanks for your purchase. Here is your CSV pack:</p>'
+        f'<p><a href="{download_url}">Download CSV</a></p>'
+        '<p>Link is valid for 90 days. If it expires or breaks, reply to '
+        'the Gumroad receipt email and we will regenerate it.</p>'
+    )
+
+
 class GumroadLister(ChannelLister):
     name = "gumroad"
 
@@ -70,14 +90,20 @@ class GumroadLister(ChannelLister):
             return ListResult(ok=False, error="gumroad: no access token configured")
         try:
             async with httpx.AsyncClient(timeout=30) as client:
+                description = _with_download(req.metadata.description, req.download_url)
                 payload = {
                     "access_token": self.token,
                     "name": req.metadata.title,
-                    "description": req.metadata.description,
+                    "description": description,
                     "price": str(req.metadata.price_cents),
                     "customizable_price": "false",
                     "published": "true" if settings.listing_publish else "false",
                 }
+                if req.download_url:
+                    # Gumroad shows this to the buyer after payment. It is
+                    # the delivery channel — we never upload the CSV to
+                    # Gumroad itself (their v2 API has no working attach).
+                    payload["custom_receipt"] = _receipt(req.download_url)
                 r = await self._post(client, "/products", data=payload)
                 body = r.json()
                 prod = body.get("product") or {}
@@ -110,12 +136,15 @@ class GumroadLister(ChannelLister):
             return await self.create(req)
         try:
             async with httpx.AsyncClient(timeout=30) as client:
+                description = _with_download(req.metadata.description, req.download_url)
                 payload = {
                     "access_token": self.token,
                     "name": req.metadata.title,
-                    "description": req.metadata.description,
+                    "description": description,
                     "price": str(req.metadata.price_cents),
                 }
+                if req.download_url:
+                    payload["custom_receipt"] = _receipt(req.download_url)
                 await self._put(client, f"/products/{pid}", data=payload)
                 log.info("gumroad.product ok pid=%s url=%s", pid, f"https://gumroad.com/l/{pid}")
                 upload_ok, upload_err = await self._upload_file(client, pid, req.csv_path)

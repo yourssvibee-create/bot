@@ -21,6 +21,11 @@ class PushRequest:
     metadata: PackMetadata
     csv_path: Path
     existing_product_id: Optional[str] = None
+    # Signed URL to the hosted CSV in Supabase Storage. Adapters embed it
+    # in the buyer-facing surface (Gumroad custom_receipt, Whop
+    # description) so purchase delivers a real file. Blank when hosting
+    # failed — adapters degrade to no-link and the digest surfaces it.
+    download_url: str = ""
 
 
 @dataclass

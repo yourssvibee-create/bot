@@ -37,6 +37,22 @@ _API_VERSION = "2026-11-07"
 _COMPANY_ID = "biz_LEjMBcG9t5jlYX"
 
 
+def _description(description: str, download_url: str) -> str:
+    """Whop has no custom_receipt analogue on v1 /products — the
+    description doubles as the post-purchase page body. We append the
+    signed Supabase Storage URL so the subscriber can download the
+    current month's refresh. Nightly re-runs patch the description
+    with the latest URL."""
+    if not download_url:
+        return description
+    tail = (
+        "\n\n---\n"
+        "Current month's CSV: " + download_url + "\n"
+        "This link is replaced monthly. Your active subscription always sees the newest file here."
+    )
+    return description.rstrip() + tail
+
+
 class WhopLister(ChannelLister):
     name = "whop"
 
@@ -82,6 +98,7 @@ class WhopLister(ChannelLister):
                     client, "POST", "/products",
                     json={
                         "title": req.metadata.title[:80],
+                        "description": _description(req.metadata.description, req.download_url),
                         "company_id": _COMPANY_ID,
                     },
                 )
@@ -121,7 +138,10 @@ class WhopLister(ChannelLister):
             async with httpx.AsyncClient(timeout=30) as client:
                 r = await self._request(
                     client, "PATCH", f"/products/{pid}",
-                    json={"title": req.metadata.title[:80]},
+                    json={
+                        "title": req.metadata.title[:80],
+                        "description": _description(req.metadata.description, req.download_url),
+                    },
                 )
                 err = ""
                 if r.status_code >= 400:
