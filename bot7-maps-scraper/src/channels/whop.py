@@ -126,6 +126,8 @@ class WhopLister(ChannelLister):
                 err = ""
                 if r.status_code >= 400:
                     err = f"whop.update {r.status_code}: {r.text[:200]}"
+                else:
+                    log.info("whop.update.product ok pid=%s url=%s", pid, f"https://whop.com/{pid}/")
                 return ListResult(
                     ok=True, product_id=pid,
                     product_url=f"https://whop.com/{pid}/",

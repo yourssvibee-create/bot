@@ -197,7 +197,7 @@ class GumroadLister(ChannelLister):
             with csv_path.open("rb") as f:
                 for i, p in enumerate(parts):
                     part_number = p.get("part_number") or (i + 1)
-                    url_ = p.get("url") or ""
+                    url_ = p.get("presigned_url") or p.get("url") or ""
                     if not url_:
                         return False, f"gumroad.part {part_number}: no url in presign"
                     chunk = f.read(per if i < n - 1 else size - per * (n - 1))
