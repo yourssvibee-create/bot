@@ -421,6 +421,29 @@ def set_telegram_offset(offset: int) -> None:
         cur.execute(sql, (int(offset),))
 
 
+def list_pending_packs() -> list[dict]:
+    """Packs with drafts live on both channels but not yet approved or
+    rejected. Used by the universal morning digest."""
+    if settings.dry_run:
+        return []
+    sql = """
+    select segment_slug, title, price_cents, price_kind, record_count,
+           gumroad_product_id, whop_product_id, download_url,
+           tier, metro_slug, vertical_slug
+    from bot7_packs
+    where status in ('ready', 'listed')
+      and approved_at is null
+      and gumroad_product_id is not null and gumroad_product_id <> ''
+      and whop_product_id   is not null and whop_product_id   <> ''
+    order by last_built_at desc nulls last
+    limit 50
+    """
+    with _conn() as c, c.cursor() as cur:
+        cur.execute(sql)
+        cols = [d.name for d in cur.description]
+        return [dict(zip(cols, r)) for r in cur.fetchall()]
+
+
 def set_pack_download_url(*, segment_slug: str, url: str) -> None:
     """Persist the signed Supabase Storage URL on bot7_packs so the
     approval poller can resurrect it without re-uploading."""

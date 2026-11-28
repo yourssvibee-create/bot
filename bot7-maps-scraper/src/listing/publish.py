@@ -238,14 +238,13 @@ async def list_to_channels(packs: list[PackSpec]) -> dict[str, int]:
         flat[f"{n}_fail"] = c["fail"]
     log.info("list.done counts=%s", flat)
 
-    # Send one Telegram approval prompt per segment that has drafts
-    # on EVERY active channel — we don't bug the operator with half-
-    # published packs; those surface in the digest instead.
-    #
-    # Only runs when BOT7_LISTING_PUBLISH is false (drafts mode). If
-    # the operator set LISTING_PUBLISH=true they explicitly asked the
-    # channel to publish straight away — no approval step needed.
-    if not settings.listing_publish:
+    # Per-segment immediate approval cards are OFF by default — the
+    # universal 09:00 IST digest rolls every pending pack into ONE card
+    # instead. Set BOT7_IMMEDIATE_APPROVAL=true to restore per-segment
+    # prompts (useful for ad-hoc re-dispatches).
+    import os as _os
+    _immediate = (_os.environ.get("BOT7_IMMEDIATE_APPROVAL", "") or "").strip().lower() in ("1", "true", "yes", "on")
+    if not settings.listing_publish and _immediate:
         _send_approval_prompts(packs, results, task_meta, pricing, download_urls)
 
     return flat

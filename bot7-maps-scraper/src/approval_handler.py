@@ -22,7 +22,11 @@ for p in (str(_REPO_ROOT), str(_BOT_ROOT)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
+from shared.approval_digest import (
+    handle_approve_all, register_aa_approver,
+)
 from shared.approval_poll_core import register_callback, register_message
+from shared.digest_registry import PendingItem, register_pending_provider
 from shared.logging import get_logger
 from shared.telegram import (
     answer_callback_query,
@@ -38,6 +42,7 @@ from src.storage.supabase_client import (
     clear_pack_edit_pending,
     find_pack_by_message,
     find_pack_by_segment,
+    list_pending_packs,
     mark_pack_published,
     mark_pack_rejected,
     set_pack_approval_message,
@@ -209,3 +214,52 @@ def _on_reply(msg: dict[str, Any]) -> bool:
 for _op in ("a", "r", "et", "ep", "ed"):
     register_callback(f"{_op}:", _on_callback)
 register_message(_on_reply)
+
+
+def _bot7_pending_provider() -> list[PendingItem]:
+    out: list[PendingItem] = []
+    for row in list_pending_packs():
+        seg = row.get("segment_slug") or ""
+        if not seg:
+            continue
+        cents = int(row.get("price_cents") or 0)
+        price_usd = cents // 100 if cents else 0
+        kind = row.get("price_kind") or "one_time"
+        recs = int(row.get("record_count") or 0)
+        out.append(PendingItem(
+            bot="bot7",
+            item_id=seg,
+            title=(row.get("title") or seg)[:120],
+            subtitle=f"${price_usd} {kind} · {recs} leads",
+            approve_cb=f"a:{seg}",
+            reject_cb=f"r:{seg}",
+            edit_cb=f"et:{seg}",
+        ))
+    return out
+
+
+def _bot7_aa_approve(item_id: str) -> bool:
+    """Approve-all helper: publish one bot7 pack by segment_slug."""
+    pack = find_pack_by_segment(item_id)
+    if not pack:
+        return False
+    res = publish_pack(
+        gumroad_pid=pack.get("gumroad_product_id") or "",
+        whop_pid=pack.get("whop_product_id") or "",
+    )
+    if res.gumroad_ok and res.whop_ok:
+        mark_pack_published(
+            segment_slug=item_id, approved_by="approve_all",
+            gumroad_live_url=res.gumroad_url, whop_live_url=res.whop_url,
+        )
+        return True
+    mark_pack_published(
+        segment_slug=item_id, approved_by="approve_all",
+        publish_error=res.error or "partial publish",
+    )
+    return False
+
+
+register_pending_provider(_bot7_pending_provider)
+register_aa_approver("bot7", _bot7_aa_approve)
+register_callback("aa:", handle_approve_all)
