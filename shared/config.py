@@ -23,10 +23,13 @@ _LOADED = False
 _LOADED_FROM: Optional[Path] = None
 
 # Known bot IDs. Add new bots here when they ship.
+# "shared" is the multi-bot runtime used by workers/approval_poll.py;
+# it runs with every bot's handler loaded and swaps BOT_ID per-import
+# so each bot's require_bot_id() check sees its own id at load time.
 KNOWN_BOT_IDS: set[str] = {
     "bot1", "bot2", "bot3", "bot4", "bot5", "bot6", "bot7", "bot8",
     "bot9", "bot10", "bot11", "bot12", "bot13", "bot14", "bot16",
-    "bot17", "ominvo-leadgen",
+    "bot17", "ominvo-leadgen", "shared",
 }
 
 # Markers that indicate a repo-root directory (where a .env is FORBIDDEN).
