@@ -1,74 +1,54 @@
-"""Approval poller — runs every 5 min via GH Actions cron.
+"""Bot 7 handler for the shared Telegram approval poll.
 
-Pulls the next page of Telegram updates with getUpdates(offset), then
-walks each update. There are two input kinds we care about:
+Callback contract (set by src/notify/approval.py):
+  a:<segment_slug>    approve & publish
+  r:<segment_slug>    reject
+  et:<segment_slug>   edit title (force_reply prompt)
+  ep:<segment_slug>   edit price
+  ed:<segment_slug>   edit description
 
-  1) callback_query: operator tapped a button on an approval prompt.
-     - a:<seg>   → publish to gumroad + whop, edit the prompt to '✅ Live'.
-     - r:<seg>   → mark rejected, edit the prompt to '❌ Rejected'.
-     - et|ep|ed:<seg> → send a force_reply prompt asking for the new
-       value; remember (chat_id, prompt_message_id, field) on the pack
-       row so the next update can match the reply back.
-
-  2) message (with reply_to_message): operator replied to one of the
-     force_reply prompts. Look up the pending edit by
-     reply_to_message.message_id, apply the new value, push the
-     updated field back to the channel drafts, re-send a fresh
-     approval prompt with the updated preview.
-
-All DB access goes through bot7_packs. All channel API access goes
-through src/listing/approve.py and the adapters' update() paths. The
-poller is idempotent on Telegram's side — Telegram keeps delivering
-the same update until we advance `offset`, so if we crash
-mid-processing the next run picks it up again.
+Plus a message handler for replies to those edit prompts.
 """
 from __future__ import annotations
 
-import os
 import re
 import sys
 from pathlib import Path
 from typing import Any
 
-import httpx
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_BOT_ROOT = Path(__file__).resolve().parents[1]
+for p in (str(_REPO_ROOT), str(_BOT_ROOT)):
+    if p not in sys.path:
+        sys.path.insert(0, p)
 
-_BOT_ROOT = Path(__file__).resolve().parents[1]           # bot7-maps-scraper/
-_REPO_ROOT = Path(__file__).resolve().parents[2]          # repo root (for `shared`)
-for p in (_BOT_ROOT, _REPO_ROOT):
-    if str(p) not in sys.path:
-        sys.path.insert(0, str(p))
-
+from shared.approval_poll_core import register_callback, register_message
 from shared.logging import get_logger
 from shared.telegram import (
     answer_callback_query,
-    get_updates,
     send_force_reply,
 )
 
-from src.notify.approval import (  # noqa: E402
+from src.listing.approve import publish_pack
+from src.notify.approval import (
     mark_approved, mark_failed, mark_rejected, send_approval_prompt,
 )
-from src.listing.approve import publish_pack  # noqa: E402
-from src.storage.supabase_client import (  # noqa: E402
+from src.storage.supabase_client import (
     apply_pack_edit,
     clear_pack_edit_pending,
     find_pack_by_message,
     find_pack_by_segment,
-    get_telegram_offset,
     mark_pack_published,
     mark_pack_rejected,
     set_pack_approval_message,
     set_pack_edit_pending,
-    set_telegram_offset,
 )
 
-log = get_logger("bot7.approval_poll")
+log = get_logger("bot7.approval_handler")
 
-
-# callback_data format: "<op>:<segment_slug>"
-_CB_RE = re.compile(r"^(a|r|et|ep|ed):(.+)$")
 _FIELD_BY_OP = {"et": "title", "ep": "price", "ed": "description"}
 _FIELD_LABEL = {"title": "title", "price": "price (USD)", "description": "description"}
+_CB_RE = re.compile(r"^(a|r|et|ep|ed):(.+)$")
 
 
 def _handle_approve(cq: dict[str, Any], segment_slug: str) -> None:
@@ -177,18 +157,14 @@ def _resend_approval(segment_slug: str) -> None:
         )
 
 
-def _handle_callback(cq: dict[str, Any]) -> None:
+def _on_callback(cq: dict[str, Any]) -> None:
     data = cq.get("data") or ""
     m = _CB_RE.match(data)
     cq_id = cq.get("id") or ""
     if not m:
-        log.warning("callback.unknown data=%s", data[:80])
-        if cq_id:
-            answer_callback_query(cq_id, "unknown action")
         return
     op, segment_slug = m.group(1), m.group(2)
     log.info("callback op=%s seg=%s", op, segment_slug)
-
     if op == "a":
         if cq_id:
             answer_callback_query(cq_id, "Publishing…")
@@ -201,65 +177,35 @@ def _handle_callback(cq: dict[str, Any]) -> None:
         if cq_id:
             answer_callback_query(cq_id, "Reply with the new value")
         _handle_edit_prompt(cq, segment_slug, _FIELD_BY_OP[op])
-    else:
-        if cq_id:
-            answer_callback_query(cq_id, "unknown")
 
 
-def _handle_reply(msg: dict[str, Any]) -> None:
+def _on_reply(msg: dict[str, Any]) -> bool:
+    """Return True iff this message was an answer to one of bot7's
+    edit prompts. Lets bot1/bot2 handlers see non-bot7 messages."""
     reply_to = msg.get("reply_to_message") or {}
     reply_to_id = reply_to.get("message_id")
     chat_id = (msg.get("chat") or {}).get("id") or ""
     if not reply_to_id:
-        return
-
+        return False
     pack = find_pack_by_message(chat_id=chat_id, message_id=int(reply_to_id))
     if not pack or not pack.get("edit_pending_field"):
-        return
+        return False
     field = pack["edit_pending_field"]
     segment_slug = pack["segment_slug"]
     new_value = (msg.get("text") or "").strip()
     if not new_value:
-        return
+        return True  # claimed but empty — swallow
     try:
         apply_pack_edit(segment_slug=segment_slug, field=field, new_value=new_value)
     except Exception as e:
         log.warning("edit.apply.fail seg=%s field=%s err=%s", segment_slug, field, e)
-        return
+        return True
     clear_pack_edit_pending(segment_slug)
     log.info("edit.applied seg=%s field=%s", segment_slug, field)
     _resend_approval(segment_slug)
+    return True
 
 
-def main() -> int:
-    # Early exit if we're not configured for notifications.
-    if not os.environ.get("TELEGRAM_BOT_TOKEN") or not os.environ.get("TELEGRAM_CHAT_ID"):
-        log.info("poll.skip no_telegram_config")
-        return 0
-
-    offset = get_telegram_offset()
-    log.info("poll.start offset=%s", offset)
-    updates = get_updates(offset + 1 if offset else 0, timeout=5)
-    if not updates:
-        log.info("poll.empty")
-        return 0
-
-    last_update_id = 0
-    for upd in updates:
-        try:
-            last_update_id = max(last_update_id, int(upd.get("update_id") or 0))
-            if "callback_query" in upd:
-                _handle_callback(upd["callback_query"])
-            elif "message" in upd and upd["message"].get("reply_to_message"):
-                _handle_reply(upd["message"])
-        except Exception as e:
-            log.warning("poll.update.exc update_id=%s err=%s", upd.get("update_id"), e)
-
-    if last_update_id:
-        set_telegram_offset(last_update_id)
-        log.info("poll.done processed=%s new_offset=%s", len(updates), last_update_id)
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+for _op in ("a", "r", "et", "ep", "ed"):
+    register_callback(f"{_op}:", _on_callback)
+register_message(_on_reply)

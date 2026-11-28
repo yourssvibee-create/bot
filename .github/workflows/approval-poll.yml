@@ -1,0 +1,61 @@
+name: approval-poll
+
+# Repo-wide Telegram approval poll. One shared Telegram bot serves
+# bot1/bot2/bot7; this workflow polls getUpdates every 5 min and
+# dispatches callbacks + slash commands to each bot's handler via
+# shared/approval_poll_core.py.
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: approval-poll
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      DATABASE_URL:              ${{ secrets.BOT7_DATABASE_URL }}
+      SUPABASE_URL:              ${{ secrets.BOT7_SUPABASE_URL }}
+      SUPABASE_ANON_KEY:         ${{ secrets.BOT7_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.BOT7_SUPABASE_SERVICE_ROLE_KEY }}
+      TELEGRAM_BOT_TOKEN:        ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID:          ${{ secrets.TELEGRAM_CHAT_ID }}
+      BOT7_GUMROAD_ACCESS_TOKEN: ${{ secrets.BOT7_GUMROAD_ACCESS_TOKEN }}
+      BOT7_WHOP_API_KEY:         ${{ secrets.BOT7_WHOP_API_KEY }}
+      BOT_ID:                    shared
+      LOG_LEVEL:                 INFO
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install poetry
+        run: pipx install poetry==2.5.1
+
+      - name: Install deps (bot7 env covers shared imports)
+        working-directory: bot7-maps-scraper
+        run: poetry install --no-interaction --no-ansi --no-root
+
+      - name: Seed shared .env
+        run: |
+          echo "DATABASE_URL=${DATABASE_URL}" > bot7-maps-scraper/.env
+          echo "SUPABASE_URL=${SUPABASE_URL}" >> bot7-maps-scraper/.env
+          echo "SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}" >> bot7-maps-scraper/.env
+          echo "SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}" >> bot7-maps-scraper/.env
+          echo "TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}" >> bot7-maps-scraper/.env
+          echo "TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}" >> bot7-maps-scraper/.env
+          echo "BOT7_GUMROAD_ACCESS_TOKEN=${BOT7_GUMROAD_ACCESS_TOKEN}" >> bot7-maps-scraper/.env
+          echo "BOT7_WHOP_API_KEY=${BOT7_WHOP_API_KEY}" >> bot7-maps-scraper/.env
+          echo "BOT_ID=shared" >> bot7-maps-scraper/.env
+
+      - name: Poll Telegram
+        working-directory: bot7-maps-scraper
+        run: poetry run python ../workers/approval_poll.py
